@@ -1,3 +1,4 @@
+import '../../widgets/save_civic_action.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -509,7 +510,13 @@ class _FeedCard extends StatelessWidget {
                   if (!controller.canParticipate) {
                     return showSignInPrompt(context);
                   }
-                  controller.toggleFeedReaction(item.id);
+                  if (!await saveCivicAction(
+                    context,
+                    () => controller.toggleFeedReaction(item.id),
+                  )) {
+                    return;
+                  }
+                  if (!context.mounted) return;
                 },
               ),
               const SizedBox(width: 14),
@@ -524,7 +531,13 @@ class _FeedCard extends StatelessWidget {
                   if (!controller.canParticipate) {
                     return showSignInPrompt(context);
                   }
-                  controller.toggleFeedSave(item.id);
+                  if (!await saveCivicAction(
+                    context,
+                    () => controller.toggleFeedSave(item.id),
+                  )) {
+                    return;
+                  }
+                  if (!context.mounted) return;
                 },
                 icon: Icon(
                   saved ? Icons.bookmark : Icons.bookmark_outline,
@@ -569,7 +582,7 @@ class _FeedCard extends StatelessWidget {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () {
+            onPressed: () async {
               final controller = AppScope.of(context);
               if (!controller.canParticipate) {
                 Navigator.pop(context);
@@ -577,7 +590,13 @@ class _FeedCard extends StatelessWidget {
                 return;
               }
               if (textController.text.trim().isNotEmpty) {
-                controller.addFeedComment(item.id);
+                if (!await saveCivicAction(
+                  context,
+                  () => controller.addFeedComment(item.id),
+                )) {
+                  return;
+                }
+                if (!context.mounted) return;
               }
               Navigator.pop(context);
             },
@@ -649,7 +668,12 @@ class NotificationsScreen extends StatelessWidget {
                 'Updates about your reports, followed projects and local announcements.',
             action: controller.unreadNotificationCount > 0
                 ? TextButton(
-                    onPressed: controller.markAllNotificationsRead,
+                    onPressed: () async {
+                      await saveCivicAction(
+                        context,
+                        controller.markAllNotificationsRead,
+                      );
+                    },
                     child: const Text('Mark all read'),
                   )
                 : null,
@@ -668,8 +692,16 @@ class NotificationsScreen extends StatelessWidget {
                     itemBuilder: (context, index) {
                       final notification = controller.notifications[index];
                       return CivicCard(
-                        onTap: () {
-                          controller.markNotificationRead(notification.id);
+                        onTap: () async {
+                          if (!await saveCivicAction(
+                            context,
+                            () => controller.markNotificationRead(
+                              notification.id,
+                            ),
+                          )) {
+                            return;
+                          }
+                          if (!context.mounted) return;
                           if (notification.route != null) {
                             Navigator.pushNamed(context, notification.route!);
                           }
@@ -916,8 +948,11 @@ class ProfileScreen extends StatelessWidget {
                 user.isGuest ? 'Leave guest mode' : 'Sign out',
                 'Return to the sign-in screen',
                 danger: true,
-                onTap: () {
-                  controller.signOut();
+                onTap: () async {
+                  if (!await saveCivicAction(context, controller.signOut)) {
+                    return;
+                  }
+                  if (!context.mounted) return;
                   Navigator.pushNamedAndRemoveUntil(
                     context,
                     '/',
@@ -986,12 +1021,18 @@ class ProfileScreen extends StatelessWidget {
             ),
             const SizedBox(height: 18),
             FilledButton(
-              onPressed: () {
-                controller.updateProfile(
-                  fullName: name.text.trim(),
-                  phone: phone.text.trim(),
-                  preferredLanguage: language,
-                );
+              onPressed: () async {
+                if (!await saveCivicAction(
+                  context,
+                  () => controller.updateProfile(
+                    fullName: name.text.trim(),
+                    phone: phone.text.trim(),
+                    preferredLanguage: language,
+                  ),
+                )) {
+                  return;
+                }
+                if (!context.mounted) return;
                 Navigator.pop(context);
               },
               child: const Text('Save changes'),

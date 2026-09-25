@@ -16,7 +16,7 @@ void main() {
       final project = controller.projectById('p-road-renewal')!;
       expect(project.followerIds.contains(controller.currentUser!.id), isTrue);
 
-      controller.toggleProjectFollow(project.id);
+      await controller.toggleProjectFollow(project.id);
 
       expect(
         controller
@@ -68,7 +68,7 @@ void main() {
         );
         const consultationId = 'c-walking';
 
-        controller.submitConsultationResponse(consultationId);
+        await controller.submitConsultationResponse(consultationId);
 
         expect(
           controller

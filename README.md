@@ -41,7 +41,7 @@ It gives residents one place to discover public projects, see them on an OpenStr
 | Citizen | `citizen@smart-sabha.lk` | `demo12345` |
 | Officer | `officer@smart-sabha.lk` | `demo12345` |
 
-The demo repository intentionally accepts any valid password in the UI. Real authentication belongs in the production backend adapter.
+Demo sign-in checks the listed credentials. Supabase authentication is available when configured; see [authentication setup](AUTH_SETUP.md) for project settings, callback URLs, and live verification. Civic data remains in memory.
 
 ## Folder structure
 
@@ -106,10 +106,28 @@ Never bundle a Supabase service-role key in this mobile application.
 
 ## Backend hand-off
 
+`CivicRepository` in `lib/data/civic_repository.dart` defines initial loading,
+report create/update operations, and atomic `CivicChanges` batches. Existing
+controller writes for profiles, onboarding, projects, announcements, departments,
+user administration, feed reactions/saves/comment counts, proposals, consultation
+participation, and notifications await repository success before updating state.
+Related records are saved together: report updates, new published announcements,
+and consultation participation include their generated notifications.
+
+`DemoCivicRepository` retains these writes for its lifetime; restarting the app
+resets them. Forms stay open on save failure and show a retry message. The project
+editor builds a complete record before saving it in one operation.
+
+Supabase authentication is implemented separately from civic data. Live project
+verification, durable storage, authority-scoped permissions, and notification
+recipient isolation are still pending. The current consultation model records
+participation only; storing answer text remains a separate feature. Feed comments
+still record counts, and project/report comment text remains screen-local.
+
 `CivicRepository` is the frontend data boundary. `DemoCivicRepository` provides working local interactions so every screen can be tested immediately. For production:
 
 1. Implement a Supabase/REST repository behind `CivicRepository`.
-2. Replace demo authentication with Supabase Auth session restoration and password-reset links.
+2. Configure Supabase authentication and verify session restoration and reset links (see AUTH_SETUP.md).
 3. Persist the typed models in the required multi-tenant tables, always scoped by `local_authority_id`.
 4. Upload photo/video/document bytes to private/public Supabase Storage buckets as appropriate.
 5. Subscribe to report, project, and announcement notification channels for realtime updates.
@@ -118,6 +136,22 @@ Never bundle a Supabase service-role key in this mobile application.
 The UI already keeps sensitive fields private: exact residential location, phone number, email address, internal complaint notes, and account metadata are not rendered in public resident views.
 
 ## Quality checks
+
+The GitHub Actions workflow in `.github/workflows/flutter.yml` runs on pushes,
+pull requests, and manual dispatches. It uses Flutter 3.32.8, installs the
+committed dependency lockfile, and checks formatting, analysis (including info
+lints), and all tests. Keep the CI SDK version aligned with the local baseline.
+The workflow needs no project secrets. Its first hosted run occurs after push.
+
+To reproduce the CI checks locally:
+
+```bash
+flutter pub get --enforce-lockfile
+dart format --output=none --set-exit-if-changed lib test
+flutter analyze --no-pub --fatal-infos
+flutter test --no-pub
+```
+
 
 After installing Flutter, run:
 

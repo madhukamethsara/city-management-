@@ -1,3 +1,4 @@
+import '../../widgets/save_civic_action.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -504,19 +505,32 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     final controller = AppScope.of(context);
+    if (_submitting) return;
     setState(() => _submitting = true);
-    final proposal = await controller.submitProposal(
-      ProposalDraft(
-        title: _title.text.trim(),
-        description: _description.text.trim(),
-        category: _category,
-        locationLabel: _location.text.trim(),
-        expectedBenefit: _benefit.text.trim(),
-        attachmentNames: _attachments.map((file) => file.name).toList(),
-      ),
-    );
-    if (!mounted) return;
-    Navigator.pushReplacementNamed(context, '/proposals/${proposal.id}');
+    try {
+      final proposal = await controller.submitProposal(
+        ProposalDraft(
+          title: _title.text.trim(),
+          description: _description.text.trim(),
+          category: _category,
+          locationLabel: _location.text.trim(),
+          expectedBenefit: _benefit.text.trim(),
+          attachmentNames: _attachments.map((file) => file.name).toList(),
+        ),
+      );
+      if (!mounted) return;
+      Navigator.pushReplacementNamed(context, '/proposals/${proposal.id}');
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not save your changes. Please try again.'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 
   @override
@@ -794,7 +808,13 @@ class _ProposalDetailScreenState extends State<ProposalDetailScreen> {
                     if (!controller.canParticipate) {
                       return showSignInPrompt(context);
                     }
-                    controller.toggleProposalSupport(proposal.id);
+                    if (!await saveCivicAction(
+                      context,
+                      () => controller.toggleProposalSupport(proposal.id),
+                    )) {
+                      return;
+                    }
+                    if (!context.mounted) return;
                   },
                   icon: Icon(
                     supported
@@ -808,7 +828,13 @@ class _ProposalDetailScreenState extends State<ProposalDetailScreen> {
                     if (!controller.canParticipate) {
                       return showSignInPrompt(context);
                     }
-                    controller.toggleProposalFollow(proposal.id);
+                    if (!await saveCivicAction(
+                      context,
+                      () => controller.toggleProposalFollow(proposal.id),
+                    )) {
+                      return;
+                    }
+                    if (!context.mounted) return;
                   },
                   icon: Icon(
                     following
@@ -846,7 +872,16 @@ class _ProposalDetailScreenState extends State<ProposalDetailScreen> {
                       return showSignInPrompt(context);
                     }
                     if (_comment.text.trim().isEmpty) return;
-                    controller.addProposalComment(proposal.id, _comment.text);
+                    if (!await saveCivicAction(
+                      context,
+                      () => controller.addProposalComment(
+                        proposal.id,
+                        _comment.text,
+                      ),
+                    )) {
+                      return;
+                    }
+                    if (!context.mounted) return;
                     _comment.clear();
                   },
                   icon: const Icon(Icons.send_outlined),
@@ -1208,7 +1243,7 @@ class _ConsultationDetailScreenState extends State<ConsultationDetailScreen> {
     );
   }
 
-  void _submit(Consultation consultation) {
+  Future<void> _submit(Consultation consultation) async {
     final missing = consultation.questions
         .where((question) => (_answers[question.id] ?? '').trim().isEmpty)
         .toList();
@@ -1230,7 +1265,13 @@ class _ConsultationDetailScreenState extends State<ConsultationDetailScreen> {
       );
       return;
     }
-    controller.submitConsultationResponse(consultation.id);
+    if (!await saveCivicAction(
+      context,
+      () => controller.submitConsultationResponse(consultation.id),
+    )) {
+      return;
+    }
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Your response was submitted. Thank you.')),
     );

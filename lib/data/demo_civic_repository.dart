@@ -1,40 +1,184 @@
 import '../models/domain_models.dart';
-
-/// The UI only talks to this contract. Replace [DemoCivicRepository] with a
-/// Supabase- or REST-backed implementation without changing screen code.
-abstract class CivicRepository {
-  Future<InitialCivicData> loadInitialData();
-}
-
-class InitialCivicData {
-  const InitialCivicData({
-    required this.authorities,
-    required this.departments,
-    required this.users,
-    required this.projects,
-    required this.reports,
-    required this.announcements,
-    required this.feedItems,
-    required this.proposals,
-    required this.consultations,
-    required this.notifications,
-  });
-
-  final List<LocalAuthority> authorities;
-  final List<Department> departments;
-  final List<AppUser> users;
-  final List<Project> projects;
-  final List<CivicReport> reports;
-  final List<Announcement> announcements;
-  final List<FeedItem> feedItems;
-  final List<Proposal> proposals;
-  final List<Consultation> consultations;
-  final List<AppNotification> notifications;
-}
+import 'civic_repository.dart';
 
 class DemoCivicRepository implements CivicRepository {
+  final Map<String, Announcement> _savedAnnouncements = {};
+  Future<InitialCivicData>? _seed;
+  final Map<String, CivicReport> _savedReports = {};
+
+  final Map<String, AppUser> _savedUsers = {};
+  final Map<String, Department> _savedDepartments = {};
+  final Map<String, Project> _savedProjects = {};
+  final Map<String, FeedItem> _savedFeedItems = {};
+  final Map<String, Proposal> _savedProposals = {};
+  final Map<String, Consultation> _savedConsultations = {};
+  final Map<String, AppNotification> _savedNotifications = {};
+
+  List<T> _merge<T>(
+    List<T> original,
+    Map<String, T> saved,
+    String Function(T) id,
+  ) => <String, T>{
+    for (final item in original) id(item): item,
+    ...saved,
+  }.values.toList();
+
+  @override
+  Future<CivicChanges> saveChanges(CivicChanges changes) async {
+    await (_seed ??= _loadSeedData());
+    // Build all snapshots before committing any record.
+    final saved = CivicChanges(
+      announcements: List.unmodifiable(changes.announcements),
+      users: List.unmodifiable(changes.users),
+      departments: List.unmodifiable(
+        changes.departments.map(
+          (item) => Department(
+            id: item.id,
+            name: item.name,
+            headName: item.headName,
+            categories: List.unmodifiable(item.categories),
+            officerCount: item.officerCount,
+          ),
+        ),
+      ),
+      projects: List.unmodifiable(
+        changes.projects.map(
+          (item) => item.copyWith(
+            milestones: List.unmodifiable(item.milestones),
+            updates: List.unmodifiable(item.updates),
+            documents: List.unmodifiable(item.documents),
+            followerIds: Set.unmodifiable(item.followerIds),
+            imageLabels: List.unmodifiable(item.imageLabels),
+          ),
+        ),
+      ),
+      feedItems: List.unmodifiable(
+        changes.feedItems.map(
+          (item) => item.copyWith(
+            reactedUserIds: Set.unmodifiable(item.reactedUserIds),
+            savedUserIds: Set.unmodifiable(item.savedUserIds),
+          ),
+        ),
+      ),
+      proposals: List.unmodifiable(
+        changes.proposals.map(
+          (item) => item.copyWith(
+            attachments: List.unmodifiable(item.attachments),
+            supporterIds: Set.unmodifiable(item.supporterIds),
+            comments: List.unmodifiable(item.comments),
+            followerIds: Set.unmodifiable(item.followerIds),
+          ),
+        ),
+      ),
+      consultations: List.unmodifiable(
+        changes.consultations.map(
+          (item) => item.copyWith(
+            respondedUserIds: Set.unmodifiable(item.respondedUserIds),
+          ),
+        ),
+      ),
+      notifications: List.unmodifiable(changes.notifications),
+    );
+    _savedUsers.addAll({for (final item in saved.users) item.id: item});
+    _savedDepartments.addAll({
+      for (final item in saved.departments) item.id: item,
+    });
+    _savedProjects.addAll({for (final item in saved.projects) item.id: item});
+    _savedFeedItems.addAll({for (final item in saved.feedItems) item.id: item});
+    _savedProposals.addAll({for (final item in saved.proposals) item.id: item});
+    _savedConsultations.addAll({
+      for (final item in saved.consultations) item.id: item,
+    });
+    _savedNotifications.addAll({
+      for (final item in saved.notifications) item.id: item,
+    });
+    _savedAnnouncements.addAll({
+      for (final item in saved.announcements) item.id: item,
+    });
+    return saved;
+  }
+
   @override
   Future<InitialCivicData> loadInitialData() async {
+    final data = await (_seed ??= _loadSeedData());
+    final reports = <String, CivicReport>{
+      for (final report in data.reports) report.id: report,
+      ..._savedReports,
+    };
+    return InitialCivicData(
+      authorities: List.of(data.authorities),
+      departments: _merge(
+        data.departments,
+        _savedDepartments,
+        (item) => item.id,
+      ),
+      users: _merge(data.users, _savedUsers, (item) => item.id),
+      projects: _merge(data.projects, _savedProjects, (item) => item.id),
+      reports: reports.values.toList(),
+      announcements: _merge(
+        data.announcements,
+        _savedAnnouncements,
+        (item) => item.id,
+      ),
+      feedItems: _merge(data.feedItems, _savedFeedItems, (item) => item.id),
+      proposals: _merge(data.proposals, _savedProposals, (item) => item.id),
+      consultations: _merge(
+        data.consultations,
+        _savedConsultations,
+        (item) => item.id,
+      ),
+      notifications: _merge(
+        data.notifications,
+        _savedNotifications,
+        (item) => item.id,
+      ),
+    );
+  }
+
+  @override
+  Future<CivicReport> createReport(
+    CivicReport report, {
+    List<AppNotification> notifications = const [],
+  }) async {
+    final data = await (_seed ??= _loadSeedData());
+    if (_savedReports.containsKey(report.id) ||
+        data.reports.any((item) => item.id == report.id)) {
+      throw StateError('Report already exists.');
+    }
+    final saved = _snapshot(report);
+    _savedNotifications.addAll({
+      for (final item in notifications) item.id: item,
+    });
+    _savedReports[report.id] = saved;
+    return saved;
+  }
+
+  @override
+  Future<CivicReport> updateReport(
+    CivicReport report, {
+    List<AppNotification> notifications = const [],
+  }) async {
+    final data = await (_seed ??= _loadSeedData());
+    if (!_savedReports.containsKey(report.id) &&
+        !data.reports.any((item) => item.id == report.id)) {
+      throw StateError('Report does not exist.');
+    }
+    final saved = _snapshot(report);
+    _savedNotifications.addAll({
+      for (final item in notifications) item.id: item,
+    });
+    _savedReports[report.id] = saved;
+    return saved;
+  }
+
+  CivicReport _snapshot(CivicReport report) => report.copyWith(
+    attachments: List.unmodifiable(report.attachments),
+    updates: List.unmodifiable(report.updates),
+    followerIds: Set.unmodifiable(report.followerIds),
+    internalNotes: List.unmodifiable(report.internalNotes),
+  );
+
+  Future<InitialCivicData> _loadSeedData() async {
     await Future<void>.delayed(const Duration(milliseconds: 280));
     final now = DateTime.now();
     final authorities = <LocalAuthority>[
