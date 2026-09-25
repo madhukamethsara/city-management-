@@ -25,10 +25,41 @@ class SmartSabhaApp extends StatelessWidget {
       child: AnimatedBuilder(
         animation: controller,
         builder: (context, _) => MaterialApp(
+          key: ValueKey(controller.sessionKey),
           title: 'Smart Sabha',
           theme: AppTheme.light(),
           debugShowCheckedModeBanner: false,
           initialRoute: '/',
+          builder: (context, child) {
+            if (controller.isLoading) return const LoadingView();
+            if (controller.startupError != null) {
+              return Scaffold(
+                body: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.cloud_off_outlined, size: 48),
+                        const SizedBox(height: 16),
+                        Text(
+                          controller.startupError!,
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 16),
+                        FilledButton.icon(
+                          onPressed: controller.bootstrap,
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Try again'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }
+            return child ?? const SizedBox.shrink();
+          },
           onGenerateRoute: (settings) => _routeFor(settings, controller),
         ),
       ),
@@ -38,7 +69,10 @@ class SmartSabhaApp extends StatelessWidget {
 
 Route<dynamic> _routeFor(RouteSettings settings, AppController controller) {
   final route = settings.name ?? '/';
-  if (controller.isLoading) return _page(settings, const LoadingView());
+
+  if (controller.needsPasswordRecovery) {
+    return _page(settings, const ResetPasswordScreen());
+  }
 
   if (route == '/login') return _page(settings, const LoginScreen());
   if (route == '/register') return _page(settings, const RegisterScreen());
@@ -46,7 +80,7 @@ Route<dynamic> _routeFor(RouteSettings settings, AppController controller) {
     return _page(settings, const ForgotPasswordScreen());
   }
   if (route == '/reset-password') {
-    return _page(settings, const ResetPasswordScreen());
+    return _page(settings, const ForgotPasswordScreen());
   }
 
   if (!controller.hasSession) return _page(settings, const WelcomeScreen());

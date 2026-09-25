@@ -1,8 +1,10 @@
 import 'dart:math';
 
+import '../data/auth/auth_repository.dart';
+
 import 'package:flutter/foundation.dart';
 
-import '../data/demo_civic_repository.dart';
+import '../data/civic_repository.dart';
 import '../models/domain_models.dart';
 
 class OnboardingDraft {
@@ -102,12 +104,44 @@ class AnnouncementDraft {
 }
 
 class AppController extends ChangeNotifier {
-  AppController(this._repository);
+  AppController(this._repository, {AuthRepository? auth}) : _auth = auth {
+    _auth?.addListener(_authChanged);
+  }
+
+  final AuthRepository? _auth;
+  final Map<String, String> _demoPasswords = {};
+  bool get isDemoAuth => _auth == null;
+  bool get needsPasswordRecovery => _auth?.needsPasswordRecovery ?? false;
+  String get sessionKey =>
+      '${_currentUser?.id ?? "signed-out"}:$needsPasswordRecovery';
+
+  void _authChanged() {
+    final incoming = _auth!.currentUser;
+    if (incoming != null && incoming.id == _currentUser?.id) {
+      _currentUser = _currentUser!.copyWith(
+        email: incoming.email,
+        role: incoming.role,
+        isActive: incoming.isActive,
+      );
+    } else {
+      _currentUser = incoming;
+    }
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _auth?.removeListener(_authChanged);
+    _auth?.dispose();
+    super.dispose();
+  }
 
   final CivicRepository _repository;
   final Random _random = Random();
 
   bool isLoading = true;
+  String? startupError;
+  bool _bootstrapInProgress = false;
   AppUser? _currentUser;
   List<LocalAuthority> _authorities = <LocalAuthority>[];
   List<Department> _departments = <Department>[];
@@ -186,42 +220,79 @@ class AppController extends ChangeNotifier {
   );
 
   Future<void> bootstrap() async {
-    final data = await _repository.loadInitialData();
-    _authorities = data.authorities;
-    _departments = data.departments;
-    _users = data.users;
-    _projects = data.projects;
-    _reports = data.reports;
-    _announcements = data.announcements;
-    _feedItems = data.feedItems;
-    _proposals = data.proposals;
-    _consultations = data.consultations;
-    _notifications = data.notifications;
-    isLoading = false;
+    if (_bootstrapInProgress) return;
+    _bootstrapInProgress = true;
+    isLoading = true;
+    startupError = null;
     notifyListeners();
+    try {
+      await _auth?.initialize();
+      final data = await _repository.loadInitialData();
+      _authorities = data.authorities;
+      _departments = data.departments;
+      _users = data.users;
+      _projects = data.projects;
+      _reports = data.reports;
+      _announcements = data.announcements;
+      _feedItems = data.feedItems;
+      _proposals = data.proposals;
+      _consultations = data.consultations;
+      _notifications = data.notifications;
+    } on AuthenticationFailure catch (error) {
+      startupError = error.message;
+    } catch (_) {
+      startupError = 'We could not load Smart Sabha. Please try again.';
+    } finally {
+      _bootstrapInProgress = false;
+      isLoading = false;
+      notifyListeners();
+    }
   }
 
   Future<void> signIn({required String email, required String password}) async {
-    await Future<void>.delayed(const Duration(milliseconds: 450));
-    final normalizedEmail = email.trim().toLowerCase();
-    AppUser? match;
-    for (final user in _users) {
-      if (user.email.toLowerCase() == normalizedEmail) {
-        match = user;
-        break;
-      }
+    if (_auth != null) {
+      await _auth.signIn(email: email, password: password);
+      _authChanged();
+      return;
     }
-    match ??= normalizedEmail.contains('officer')
-        ? _users.firstWhere((user) => user.isOfficer)
-        : _users.firstWhere((user) => user.id == 'u-citizen');
+    final normalizedEmail = email.trim().toLowerCase();
+    final match = _firstOrNull(
+      _users,
+      (user) => user.email.toLowerCase() == normalizedEmail,
+    );
+    if (match == null ||
+        !match.isActive ||
+        password != (_demoPasswords[match.id] ?? 'demo12345')) {
+      throw const AuthenticationFailure('Email or password is incorrect.');
+    }
     _currentUser = match;
     notifyListeners();
   }
 
-  Future<void> register({
+  Future<bool> register({
     required String fullName,
     required String email,
+    required String password,
   }) async {
+    if (password.length < 8) {
+      throw const AuthenticationFailure('Use at least 8 characters.');
+    }
+    if (_auth != null) {
+      final confirmationRequired = await _auth.register(
+        fullName: fullName,
+        email: email,
+        password: password,
+      );
+      _authChanged();
+      return confirmationRequired;
+    }
+    if (_users.any(
+      (user) => user.email.toLowerCase() == email.trim().toLowerCase(),
+    )) {
+      throw const AuthenticationFailure(
+        'An account with this email already exists.',
+      );
+    }
     await Future<void>.delayed(const Duration(milliseconds: 450));
     final user = AppUser(
       id: 'u-${DateTime.now().millisecondsSinceEpoch}',
@@ -236,9 +307,11 @@ class AppController extends ChangeNotifier {
       onboardingComplete: false,
       isActive: true,
     );
-    _users = <AppUser>[..._users, user];
-    _currentUser = user;
+    await _commit(CivicChanges(users: [user]));
+    _demoPasswords[user.id] = password;
+    _currentUser = _users.firstWhere((item) => item.id == user.id);
     notifyListeners();
+    return false;
   }
 
   void continueAsGuest() {
@@ -258,15 +331,37 @@ class AppController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void signOut() {
+  Future<void> signOut() async {
+    if (_auth != null && !isGuest) await _auth.signOut();
     _currentUser = null;
     notifyListeners();
   }
 
-  void completeOnboarding(OnboardingDraft draft) {
+  Future<void> sendPasswordReset(String email) async {
+    if (_auth == null) {
+      throw const AuthenticationFailure(
+        'Password-reset emails are unavailable in demo mode.',
+      );
+    }
+    await _auth.sendPasswordReset(email);
+  }
+
+  Future<void> updatePassword(String password) async {
+    if (_auth == null || !needsPasswordRecovery) {
+      throw const AuthenticationFailure(
+        'Open a valid password-reset link from your email first.',
+      );
+    }
+    if (password.length < 8) {
+      throw const AuthenticationFailure('Use at least 8 characters.');
+    }
+    await _auth.updatePassword(password);
+  }
+
+  Future<void> completeOnboarding(OnboardingDraft draft) async {
     final user = _currentUser;
     if (user == null) return;
-    _currentUser = user.copyWith(
+    final updated = user.copyWith(
       fullName: draft.fullName,
       preferredLanguage: draft.language,
       phone: draft.phone,
@@ -276,23 +371,23 @@ class AppController extends ChangeNotifier {
       residentialArea: draft.residentialArea,
       onboardingComplete: true,
     );
-    _replaceUser(_currentUser!);
+    await _commit(CivicChanges(users: [updated]));
     notifyListeners();
   }
 
-  void updateProfile({
+  Future<void> updateProfile({
     required String fullName,
     required String phone,
     required String preferredLanguage,
-  }) {
+  }) async {
     final user = _currentUser;
     if (user == null || user.isGuest) return;
-    _currentUser = user.copyWith(
+    final updated = user.copyWith(
       fullName: fullName,
       phone: phone,
       preferredLanguage: preferredLanguage,
     );
-    _replaceUser(_currentUser!);
+    await _commit(CivicChanges(users: [updated]));
     notifyListeners();
   }
 
@@ -317,7 +412,7 @@ class AppController extends ChangeNotifier {
     }).toList();
   }
 
-  void toggleProjectFollow(String projectId) {
+  Future<void> toggleProjectFollow(String projectId) async {
     final user = _currentUser;
     if (user == null || user.isGuest) return;
     final project = projectById(projectId);
@@ -326,11 +421,13 @@ class AppController extends ChangeNotifier {
     followers.contains(user.id)
         ? followers.remove(user.id)
         : followers.add(user.id);
-    _replaceProject(project.copyWith(followerIds: followers));
+    await _commit(
+      CivicChanges(projects: [project.copyWith(followerIds: followers)]),
+    );
     notifyListeners();
   }
 
-  void toggleReportFollow(String reportId) {
+  Future<void> toggleReportFollow(String reportId) async {
     final user = _currentUser;
     final report = reportById(reportId);
     if (user == null || user.isGuest || report == null) return;
@@ -338,11 +435,13 @@ class AppController extends ChangeNotifier {
     followers.contains(user.id)
         ? followers.remove(user.id)
         : followers.add(user.id);
-    _replaceReport(report.copyWith(followerIds: followers));
+    _replaceReport(
+      await _repository.updateReport(report.copyWith(followerIds: followers)),
+    );
     notifyListeners();
   }
 
-  void toggleFeedReaction(String feedId) {
+  Future<void> toggleFeedReaction(String feedId) async {
     final user = _currentUser;
     if (user == null || user.isGuest) return;
     final item = _firstOrNull(_feedItems, (entry) => entry.id == feedId);
@@ -350,32 +449,42 @@ class AppController extends ChangeNotifier {
     final reacted = Set<String>.from(item.reactedUserIds);
     final isRemoving = reacted.contains(user.id);
     isRemoving ? reacted.remove(user.id) : reacted.add(user.id);
-    _replaceFeedItem(
-      item.copyWith(
-        reactionCount: item.reactionCount + (isRemoving ? -1 : 1),
-        reactedUserIds: reacted,
+    await _commit(
+      CivicChanges(
+        feedItems: [
+          item.copyWith(
+            reactionCount: item.reactionCount + (isRemoving ? -1 : 1),
+            reactedUserIds: reacted,
+          ),
+        ],
       ),
     );
     notifyListeners();
   }
 
-  void toggleFeedSave(String feedId) {
+  Future<void> toggleFeedSave(String feedId) async {
     final user = _currentUser;
     if (user == null || user.isGuest) return;
     final item = _firstOrNull(_feedItems, (entry) => entry.id == feedId);
     if (item == null) return;
     final saved = Set<String>.from(item.savedUserIds);
     saved.contains(user.id) ? saved.remove(user.id) : saved.add(user.id);
-    _replaceFeedItem(item.copyWith(savedUserIds: saved));
+    await _commit(
+      CivicChanges(feedItems: [item.copyWith(savedUserIds: saved)]),
+    );
     notifyListeners();
   }
 
-  void addFeedComment(String feedId) {
+  Future<void> addFeedComment(String feedId) async {
     final user = _currentUser;
     if (user == null || user.isGuest) return;
     final item = _firstOrNull(_feedItems, (entry) => entry.id == feedId);
     if (item == null) return;
-    _replaceFeedItem(item.copyWith(commentCount: item.commentCount + 1));
+    await _commit(
+      CivicChanges(
+        feedItems: [item.copyWith(commentCount: item.commentCount + 1)],
+      ),
+    );
     notifyListeners();
   }
 
@@ -384,7 +493,6 @@ class AppController extends ChangeNotifier {
     if (user == null || user.isGuest) {
       throw StateError('Sign in before submitting a report.');
     }
-    await Future<void>.delayed(const Duration(milliseconds: 500));
     final today = DateTime.now();
     final caseNumber = 'SS-${today.year}-${(1000 + _random.nextInt(8999))}';
     final report = CivicReport(
@@ -413,24 +521,28 @@ class AppController extends ChangeNotifier {
       ],
       followerIds: <String>{user.id},
     );
-    _reports = <CivicReport>[report, ..._reports];
-    _notifications = <AppNotification>[
+    final notifications = <AppNotification>[
       AppNotification(
         id: 'n-${today.microsecondsSinceEpoch}',
         title: 'Your report was submitted',
-        message: '$caseNumber was sent to ${report.department}.',
+        message: '${report.caseNumber} was sent to ${report.department}.',
         category: 'Report update',
         createdAt: today,
         isRead: false,
         route: '/reports/${report.id}',
       ),
-      ..._notifications,
     ];
+    final savedReport = await _repository.createReport(
+      report,
+      notifications: notifications,
+    );
+    _reports = <CivicReport>[savedReport, ..._reports];
+    _notifications = [...notifications, ..._notifications];
     notifyListeners();
-    return report;
+    return savedReport;
   }
 
-  void updateReportStatus({
+  Future<void> updateReportStatus({
     required String reportId,
     required ReportStatus status,
     required String department,
@@ -439,7 +551,7 @@ class AppController extends ChangeNotifier {
     required String publicUpdate,
     List<String>? attachmentNames,
     String? internalNote,
-  }) {
+  }) async {
     final report = reportById(reportId);
     if (report == null) return;
     final now = DateTime.now();
@@ -452,7 +564,22 @@ class AppController extends ChangeNotifier {
         isPublic: true,
       ),
     ];
-    _replaceReport(
+    var notifications = <AppNotification>[];
+    if (report.ownerUserId == _currentUser?.id ||
+        report.ownerUserId == 'u-citizen') {
+      notifications = <AppNotification>[
+        AppNotification(
+          id: 'n-admin-${now.microsecondsSinceEpoch}',
+          title: 'Your report has an update',
+          message: '${report.caseNumber}: $publicUpdate',
+          category: 'Report update',
+          createdAt: now,
+          isRead: false,
+          route: '/reports/$reportId',
+        ),
+      ];
+    }
+    final savedReport = await _repository.updateReport(
       report.copyWith(
         status: status,
         department: department,
@@ -467,33 +594,24 @@ class AppController extends ChangeNotifier {
             : <String>[...report.internalNotes, internalNote.trim()],
         updates: updates,
       ),
+      notifications: notifications,
     );
-    if (report.ownerUserId == _currentUser?.id ||
-        report.ownerUserId == 'u-citizen') {
-      _notifications = <AppNotification>[
-        AppNotification(
-          id: 'n-admin-${now.microsecondsSinceEpoch}',
-          title: 'Your report has an update',
-          message: '${report.caseNumber}: $publicUpdate',
-          category: 'Report update',
-          createdAt: now,
-          isRead: false,
-          route: '/reports/$reportId',
-        ),
-        ..._notifications,
-      ];
-    }
+    _replaceReport(savedReport);
+    _notifications = [...notifications, ..._notifications];
     notifyListeners();
   }
 
-  void confirmReportResolution(String reportId, {required bool resolved}) {
+  Future<void> confirmReportResolution(
+    String reportId, {
+    required bool resolved,
+  }) async {
     final report = reportById(reportId);
     if (report == null) return;
     final now = DateTime.now();
     final message = resolved
         ? 'The resident confirmed that this issue is resolved.'
         : 'The resident reported that the issue still needs attention.';
-    _replaceReport(
+    final savedReport = await _repository.updateReport(
       report.copyWith(
         status: resolved ? ReportStatus.resolved : ReportStatus.inProgress,
         lastUpdated: now,
@@ -508,6 +626,7 @@ class AppController extends ChangeNotifier {
         ],
       ),
     );
+    _replaceReport(savedReport);
     notifyListeners();
   }
 
@@ -532,12 +651,12 @@ class AppController extends ChangeNotifier {
       comments: const <CivicComment>[],
       followerIds: <String>{user.id},
     );
-    _proposals = <Proposal>[proposal, ..._proposals];
+    await _commit(CivicChanges(proposals: [proposal]));
     notifyListeners();
-    return proposal;
+    return proposalById(proposal.id)!;
   }
 
-  void toggleProposalSupport(String proposalId) {
+  Future<void> toggleProposalSupport(String proposalId) async {
     final user = _currentUser;
     final proposal = proposalById(proposalId);
     if (user == null || user.isGuest || proposal == null) return;
@@ -545,11 +664,13 @@ class AppController extends ChangeNotifier {
     supporters.contains(user.id)
         ? supporters.remove(user.id)
         : supporters.add(user.id);
-    _replaceProposal(proposal.copyWith(supporterIds: supporters));
+    await _commit(
+      CivicChanges(proposals: [proposal.copyWith(supporterIds: supporters)]),
+    );
     notifyListeners();
   }
 
-  void toggleProposalFollow(String proposalId) {
+  Future<void> toggleProposalFollow(String proposalId) async {
     final user = _currentUser;
     final proposal = proposalById(proposalId);
     if (user == null || user.isGuest || proposal == null) return;
@@ -557,11 +678,13 @@ class AppController extends ChangeNotifier {
     followers.contains(user.id)
         ? followers.remove(user.id)
         : followers.add(user.id);
-    _replaceProposal(proposal.copyWith(followerIds: followers));
+    await _commit(
+      CivicChanges(proposals: [proposal.copyWith(followerIds: followers)]),
+    );
     notifyListeners();
   }
 
-  void addProposalComment(String proposalId, String message) {
+  Future<void> addProposalComment(String proposalId, String message) async {
     final user = _currentUser;
     final proposal = proposalById(proposalId);
     if (user == null ||
@@ -577,22 +700,26 @@ class AppController extends ChangeNotifier {
       createdAt: DateTime.now(),
       isVerified: user.isVerified,
     );
-    _replaceProposal(
-      proposal.copyWith(
-        comments: <CivicComment>[...proposal.comments, comment],
+    await _commit(
+      CivicChanges(
+        proposals: [
+          proposal.copyWith(
+            comments: <CivicComment>[...proposal.comments, comment],
+          ),
+        ],
       ),
     );
     notifyListeners();
   }
 
-  void submitConsultationResponse(String consultationId) {
+  Future<void> submitConsultationResponse(String consultationId) async {
     final user = _currentUser;
     final consultation = consultationById(consultationId);
     if (user == null || user.isGuest || consultation == null) return;
     final responses = Set<String>.from(consultation.respondedUserIds)
       ..add(user.id);
-    _replaceConsultation(consultation.copyWith(respondedUserIds: responses));
-    _notifications = <AppNotification>[
+    final updated = consultation.copyWith(respondedUserIds: responses);
+    final notifications = <AppNotification>[
       AppNotification(
         id: 'n-consult-${DateTime.now().microsecondsSinceEpoch}',
         title: 'Thank you for your response',
@@ -601,36 +728,42 @@ class AppController extends ChangeNotifier {
         createdAt: DateTime.now(),
         isRead: false,
       ),
-      ..._notifications,
     ];
+    await _commit(
+      CivicChanges(consultations: [updated], notifications: notifications),
+    );
     notifyListeners();
   }
 
-  void markNotificationRead(String id) {
+  Future<void> markNotificationRead(String id) async {
     final notification = _firstOrNull(_notifications, (item) => item.id == id);
     if (notification == null || notification.isRead) return;
-    _replaceNotification(notification.copyWith(isRead: true));
+    await _commit(
+      CivicChanges(notifications: [notification.copyWith(isRead: true)]),
+    );
     notifyListeners();
   }
 
-  void markAllNotificationsRead() {
-    _notifications = _notifications
+  Future<void> markAllNotificationsRead() async {
+    final updated = _notifications
         .map((item) => item.copyWith(isRead: true))
         .toList();
+    await _commit(CivicChanges(notifications: updated));
     notifyListeners();
   }
 
-  void saveProject(Project project) {
-    final existing = projectById(project.id);
-    if (existing == null) {
-      _projects = <Project>[project, ..._projects];
-    } else {
-      _replaceProject(project);
-    }
+  Future<void> saveProject(Project project) async {
+    await _commit(CivicChanges(projects: [project]));
     notifyListeners();
   }
 
-  Project createProject(ProjectDraft draft) {
+  Future<Project> createProject(ProjectDraft draft) async {
+    final project = buildProject(draft);
+    await saveProject(project);
+    return projectById(project.id)!;
+  }
+
+  Project buildProject(ProjectDraft draft) {
     final now = DateTime.now();
     final project = Project(
       id: 'p-${now.microsecondsSinceEpoch}',
@@ -660,14 +793,13 @@ class AppController extends ChangeNotifier {
       followerIds: <String>{},
       projectManager: _currentUser?.fullName,
     );
-    saveProject(project);
     return project;
   }
 
-  Announcement createAnnouncement(
+  Future<Announcement> createAnnouncement(
     AnnouncementDraft draft, {
     bool publishNow = false,
-  }) {
+  }) async {
     final announcement = Announcement(
       id: 'a-${DateTime.now().microsecondsSinceEpoch}',
       title: draft.title,
@@ -679,9 +811,9 @@ class AppController extends ChangeNotifier {
       isPinned: false,
       isPublished: publishNow,
     );
-    _announcements = <Announcement>[announcement, ..._announcements];
+    var notifications = <AppNotification>[];
     if (publishNow) {
-      _notifications = <AppNotification>[
+      notifications = <AppNotification>[
         AppNotification(
           id: 'n-announcement-${DateTime.now().microsecondsSinceEpoch}',
           title: 'New local announcement',
@@ -691,51 +823,46 @@ class AppController extends ChangeNotifier {
           isRead: false,
           route: '/announcements/${announcement.id}',
         ),
-        ..._notifications,
       ];
     }
+    await _commit(
+      CivicChanges(announcements: [announcement], notifications: notifications),
+    );
     notifyListeners();
-    return announcement;
+    return announcementById(announcement.id)!;
   }
 
-  void publishAnnouncement(String announcementId) {
+  Future<void> publishAnnouncement(String announcementId) async {
     final announcement = announcementById(announcementId);
     if (announcement == null) return;
     final published = announcement.copyWith(isPublished: true);
-    _announcements = _announcements
-        .map((item) => item.id == announcementId ? published : item)
-        .toList();
+    await _commit(CivicChanges(announcements: [published]));
     notifyListeners();
   }
 
-  void saveAnnouncement(Announcement announcement) {
-    final existing = announcementById(announcement.id);
-    _announcements = existing == null
-        ? <Announcement>[announcement, ..._announcements]
-        : _announcements
-              .map((item) => item.id == announcement.id ? announcement : item)
-              .toList();
+  Future<void> saveAnnouncement(Announcement announcement) async {
+    await _commit(CivicChanges(announcements: [announcement]));
     notifyListeners();
   }
 
-  void toggleUserActive(String userId) {
+  Future<void> toggleUserActive(String userId) async {
     final user = _firstOrNull(_users, (item) => item.id == userId);
     if (user == null) return;
-    _replaceUser(user.copyWith(isActive: !user.isActive));
+    await _commit(
+      CivicChanges(users: [user.copyWith(isActive: !user.isActive)]),
+    );
     notifyListeners();
   }
 
-  void changeUserRole(String userId, UserRole role) {
+  Future<void> changeUserRole(String userId, UserRole role) async {
     final user = _firstOrNull(_users, (item) => item.id == userId);
     if (user == null) return;
-    _replaceUser(user.copyWith(role: role));
+    await _commit(CivicChanges(users: [user.copyWith(role: role)]));
     notifyListeners();
   }
 
-  void updateDepartment(Department department) {
-    _departments = _departments
-        .map((item) => item.id == department.id ? department : item)
-        .toList();
+  Future<void> updateDepartment(Department department) async {
+    await _commit(CivicChanges(departments: [department]));
     notifyListeners();
   }
 
@@ -775,46 +902,56 @@ class AppController extends ChangeNotifier {
     return results;
   }
 
-  void _replaceProject(Project updated) {
-    _projects = _projects
-        .map((item) => item.id == updated.id ? updated : item)
-        .toList();
-  }
-
   void _replaceReport(CivicReport updated) {
     _reports = _reports
         .map((item) => item.id == updated.id ? updated : item)
         .toList();
   }
 
-  void _replaceFeedItem(FeedItem updated) {
-    _feedItems = _feedItems
-        .map((item) => item.id == updated.id ? updated : item)
-        .toList();
+  Future<void> _commit(CivicChanges changes) async {
+    final saved = await _repository.saveChanges(changes);
+    _announcements = _mergeRecords(
+      _announcements,
+      saved.announcements,
+      (item) => item.id,
+    );
+    _users = _mergeRecords(_users, saved.users, (item) => item.id);
+    _departments = _mergeRecords(
+      _departments,
+      saved.departments,
+      (item) => item.id,
+    );
+    _projects = _mergeRecords(_projects, saved.projects, (item) => item.id);
+    _feedItems = _mergeRecords(_feedItems, saved.feedItems, (item) => item.id);
+    _proposals = _mergeRecords(_proposals, saved.proposals, (item) => item.id);
+    _consultations = _mergeRecords(
+      _consultations,
+      saved.consultations,
+      (item) => item.id,
+    );
+    _notifications = _mergeRecords(
+      _notifications,
+      saved.notifications,
+      (item) => item.id,
+    );
+    final current = _currentUser;
+    if (current != null) {
+      _currentUser =
+          _firstOrNull(saved.users, (user) => user.id == current.id) ?? current;
+    }
   }
 
-  void _replaceProposal(Proposal updated) {
-    _proposals = _proposals
-        .map((item) => item.id == updated.id ? updated : item)
-        .toList();
-  }
-
-  void _replaceConsultation(Consultation updated) {
-    _consultations = _consultations
-        .map((item) => item.id == updated.id ? updated : item)
-        .toList();
-  }
-
-  void _replaceNotification(AppNotification updated) {
-    _notifications = _notifications
-        .map((item) => item.id == updated.id ? updated : item)
-        .toList();
-  }
-
-  void _replaceUser(AppUser updated) {
-    _users = _users
-        .map((item) => item.id == updated.id ? updated : item)
-        .toList();
+  List<T> _mergeRecords<T>(
+    List<T> current,
+    List<T> changed,
+    String Function(T) id,
+  ) {
+    final byId = {for (final item in changed) id(item): item};
+    final existingIds = current.map(id).toSet();
+    return [
+      ...changed.where((item) => !existingIds.contains(id(item))),
+      ...current.map((item) => byId[id(item)] ?? item),
+    ];
   }
 
   String _departmentForCategory(String category) {

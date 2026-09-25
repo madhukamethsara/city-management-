@@ -1,3 +1,4 @@
+import '../../widgets/save_civic_action.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
@@ -85,18 +86,24 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  void _complete() {
-    AppScope.of(context).completeOnboarding(
-      OnboardingDraft(
-        fullName: _nameController.text.trim(),
-        language: _language,
-        phone: _phoneController.text.trim(),
-        localAuthorityId: _authorityId!,
-        ward: _ward,
-        gnDivision: _gnDivision,
-        residentialArea: _residentialArea,
+  Future<void> _complete() async {
+    if (!await saveCivicAction(
+      context,
+      () => AppScope.of(context).completeOnboarding(
+        OnboardingDraft(
+          fullName: _nameController.text.trim(),
+          language: _language,
+          phone: _phoneController.text.trim(),
+          localAuthorityId: _authorityId!,
+          ward: _ward,
+          gnDivision: _gnDivision,
+          residentialArea: _residentialArea,
+        ),
       ),
-    );
+    )) {
+      return;
+    }
+    if (!mounted) return;
     Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
   }
 

@@ -1,3 +1,4 @@
+import '../../widgets/save_civic_action.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -82,8 +83,9 @@ class _AdminShellState extends State<AdminShell> {
             label: const Text('Citizen app'),
           ),
           IconButton(
-            onPressed: () {
-              controller.signOut();
+            onPressed: () async {
+              if (!await saveCivicAction(context, controller.signOut)) return;
+              if (!context.mounted) return;
               Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
             },
             icon: const Icon(Icons.logout),
@@ -723,6 +725,7 @@ class _ReportEditorState extends State<_ReportEditor> {
   String? _priority;
   String? _officer;
   XFile? _completionPhoto;
+  bool _saving = false;
 
   @override
   void initState() {
@@ -859,23 +862,40 @@ class _ReportEditorState extends State<_ReportEditor> {
             ),
             const SizedBox(height: 18),
             FilledButton(
-              onPressed: () {
-                controller.updateReportStatus(
-                  reportId: widget.report.id,
-                  status: _status!,
-                  department: _department!,
-                  priority: _priority!,
-                  assignedOfficer: _officer,
-                  publicUpdate: _publicUpdate.text.trim().isEmpty
-                      ? 'Case details updated by the local authority.'
-                      : _publicUpdate.text.trim(),
-                  internalNote: _internalNote.text,
-                  attachmentNames: _completionPhoto == null
-                      ? null
-                      : <String>[_completionPhoto!.name],
-                );
-                Navigator.pop(context);
-              },
+              onPressed: _saving
+                  ? null
+                  : () async {
+                      setState(() => _saving = true);
+                      try {
+                        await controller.updateReportStatus(
+                          reportId: widget.report.id,
+                          status: _status!,
+                          department: _department!,
+                          priority: _priority!,
+                          assignedOfficer: _officer,
+                          publicUpdate: _publicUpdate.text.trim().isEmpty
+                              ? 'Case details updated by the local authority.'
+                              : _publicUpdate.text.trim(),
+                          internalNote: _internalNote.text,
+                          attachmentNames: _completionPhoto == null
+                              ? null
+                              : <String>[_completionPhoto!.name],
+                        );
+                        if (!context.mounted) return;
+                        Navigator.pop(context);
+                      } catch (_) {
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Could not save the case update. Please try again.',
+                            ),
+                          ),
+                        );
+                      } finally {
+                        if (mounted) setState(() => _saving = false);
+                      }
+                    },
               child: const Text('Save case update'),
             ),
           ],
@@ -1031,7 +1051,7 @@ class _ProjectEditorState extends State<_ProjectEditor> {
     if (mounted && images.isNotEmpty) setState(() => _images.addAll(images));
   }
 
-  void _save() {
+  Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     final controller = AppScope.of(context);
     final now = DateTime.now();
@@ -1068,7 +1088,7 @@ class _ProjectEditorState extends State<_ProjectEditor> {
             ),
           ];
     if (widget.project == null) {
-      final created = controller.createProject(
+      final created = controller.buildProject(
         ProjectDraft(
           title: _title.text.trim(),
           description: _description.text.trim(),
@@ -1080,39 +1100,51 @@ class _ProjectEditorState extends State<_ProjectEditor> {
           department: _department,
         ),
       );
-      controller.saveProject(
-        created.copyWith(
-          contractor: _contractor.text.trim(),
-          isBudgetPublic: _budgetPublic,
-          documents: document,
-          milestones: milestone,
-          updates: <ProjectUpdate>[...created.updates, ...update],
-          imageLabels: _images.map((image) => image.name).toList(),
+      if (!await saveCivicAction(
+        context,
+        () => controller.saveProject(
+          created.copyWith(
+            contractor: _contractor.text.trim(),
+            isBudgetPublic: _budgetPublic,
+            documents: document,
+            milestones: milestone,
+            updates: <ProjectUpdate>[...created.updates, ...update],
+            imageLabels: _images.map((image) => image.name).toList(),
+          ),
         ),
-      );
+      )) {
+        return;
+      }
+      if (!mounted) return;
     } else {
       final project = widget.project!;
-      controller.saveProject(
-        project.copyWith(
-          title: _title.text.trim(),
-          description: _description.text.trim(),
-          category: _category.text.trim(),
-          locationLabel: _location.text.trim(),
-          status: _status,
-          progress: _progress,
-          department: _department,
-          budget: budget,
-          isBudgetPublic: _budgetPublic,
-          contractor: _contractor.text.trim(),
-          documents: <PublicDocument>[...project.documents, ...document],
-          milestones: <ProjectMilestone>[...project.milestones, ...milestone],
-          updates: <ProjectUpdate>[...project.updates, ...update],
-          imageLabels: <String>[
-            ...project.imageLabels,
-            ..._images.map((image) => image.name),
-          ],
+      if (!await saveCivicAction(
+        context,
+        () => controller.saveProject(
+          project.copyWith(
+            title: _title.text.trim(),
+            description: _description.text.trim(),
+            category: _category.text.trim(),
+            locationLabel: _location.text.trim(),
+            status: _status,
+            progress: _progress,
+            department: _department,
+            budget: budget,
+            isBudgetPublic: _budgetPublic,
+            contractor: _contractor.text.trim(),
+            documents: <PublicDocument>[...project.documents, ...document],
+            milestones: <ProjectMilestone>[...project.milestones, ...milestone],
+            updates: <ProjectUpdate>[...project.updates, ...update],
+            imageLabels: <String>[
+              ...project.imageLabels,
+              ..._images.map((image) => image.name),
+            ],
+          ),
         ),
-      );
+      )) {
+        return;
+      }
+      if (!mounted) return;
     }
     Navigator.pop(context);
   }
@@ -1372,15 +1404,28 @@ class AdminAnnouncementsPanel extends StatelessWidget {
                       ),
                     ),
                     PopupMenuButton<String>(
-                      onSelected: (value) {
+                      onSelected: (value) async {
                         if (value == 'edit') {
                           _openComposer(context, existing: announcement);
                         } else if (value == 'publish') {
-                          controller.publishAnnouncement(announcement.id);
+                          if (!await saveCivicAction(
+                            context,
+                            () =>
+                                controller.publishAnnouncement(announcement.id),
+                          )) {
+                            return;
+                          }
+                          if (!context.mounted) return;
                         } else {
-                          controller.saveAnnouncement(
-                            announcement.copyWith(isPublished: false),
-                          );
+                          if (!await saveCivicAction(
+                            context,
+                            () => controller.saveAnnouncement(
+                              announcement.copyWith(isPublished: false),
+                            ),
+                          )) {
+                            return;
+                          }
+                          if (!context.mounted) return;
                         }
                       },
                       itemBuilder: (context) => <PopupMenuEntry<String>>[
@@ -1457,31 +1502,43 @@ class _AnnouncementComposerState extends State<_AnnouncementComposer> {
     super.dispose();
   }
 
-  void _save() {
+  Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     final controller = AppScope.of(context);
     if (widget.existing == null) {
-      controller.createAnnouncement(
-        AnnouncementDraft(
-          title: _title.text.trim(),
-          body: _body.text.trim(),
-          type: _type,
-          department: _department,
-          targetLabel: _target.text.trim(),
+      if (!await saveCivicAction(
+        context,
+        () => controller.createAnnouncement(
+          AnnouncementDraft(
+            title: _title.text.trim(),
+            body: _body.text.trim(),
+            type: _type,
+            department: _department,
+            targetLabel: _target.text.trim(),
+          ),
+          publishNow: _publishNow,
         ),
-        publishNow: _publishNow,
-      );
+      )) {
+        return;
+      }
+      if (!mounted) return;
     } else {
-      controller.saveAnnouncement(
-        widget.existing!.copyWith(
-          title: _title.text.trim(),
-          body: _body.text.trim(),
-          type: _type,
-          department: _department,
-          targetLabel: _target.text.trim(),
-          isPublished: _publishNow,
+      if (!await saveCivicAction(
+        context,
+        () => controller.saveAnnouncement(
+          widget.existing!.copyWith(
+            title: _title.text.trim(),
+            body: _body.text.trim(),
+            type: _type,
+            department: _department,
+            targetLabel: _target.text.trim(),
+            isPublished: _publishNow,
+          ),
         ),
-      );
+      )) {
+        return;
+      }
+      if (!mounted) return;
     }
     Navigator.pop(context);
   }
@@ -1731,19 +1788,26 @@ class AdminDepartmentsPanel extends StatelessWidget {
             ),
             const SizedBox(height: 18),
             FilledButton(
-              onPressed: () {
-                AppScope.of(context).updateDepartment(
-                  department.copyWith(
-                    headName: head.text.trim(),
-                    officerCount:
-                        int.tryParse(officers.text) ?? department.officerCount,
-                    categories: categories.text
-                        .split(',')
-                        .map((value) => value.trim())
-                        .where((value) => value.isNotEmpty)
-                        .toList(),
+              onPressed: () async {
+                if (!await saveCivicAction(
+                  context,
+                  () => AppScope.of(context).updateDepartment(
+                    department.copyWith(
+                      headName: head.text.trim(),
+                      officerCount:
+                          int.tryParse(officers.text) ??
+                          department.officerCount,
+                      categories: categories.text
+                          .split(',')
+                          .map((value) => value.trim())
+                          .where((value) => value.isNotEmpty)
+                          .toList(),
+                    ),
                   ),
-                );
+                )) {
+                  return;
+                }
+                if (!context.mounted) return;
                 Navigator.pop(context);
               },
               child: const Text('Save department'),
@@ -1927,16 +1991,28 @@ class _AdminUsersPanelState extends State<AdminUsersPanel> {
             ),
             const SizedBox(height: 14),
             FilledButton(
-              onPressed: () {
-                AppScope.of(context).changeUserRole(user.id, role);
+              onPressed: () async {
+                if (!await saveCivicAction(
+                  context,
+                  () => AppScope.of(context).changeUserRole(user.id, role),
+                )) {
+                  return;
+                }
+                if (!context.mounted) return;
                 Navigator.pop(context);
               },
               child: const Text('Update role'),
             ),
             const SizedBox(height: 8),
             OutlinedButton.icon(
-              onPressed: () {
-                AppScope.of(context).toggleUserActive(user.id);
+              onPressed: () async {
+                if (!await saveCivicAction(
+                  context,
+                  () => AppScope.of(context).toggleUserActive(user.id),
+                )) {
+                  return;
+                }
+                if (!context.mounted) return;
                 Navigator.pop(context);
               },
               icon: Icon(

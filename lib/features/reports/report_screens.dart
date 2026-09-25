@@ -493,7 +493,20 @@ class _ReportWizardScreenState extends State<ReportWizardScreen> {
                             if (!controller.canParticipate) {
                               return showSignInPrompt(context);
                             }
-                            controller.toggleReportFollow(report.id);
+                            try {
+                              await controller.toggleReportFollow(report.id);
+                            } catch (_) {
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Could not save your change. Please try again.',
+                                  ),
+                                ),
+                              );
+                              return;
+                            }
+                            if (!mounted) return;
                             Navigator.pushNamed(
                               context,
                               '/reports/${report.id}',
@@ -812,7 +825,20 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                     if (!controller.canParticipate) {
                       return showSignInPrompt(context);
                     }
-                    controller.toggleReportFollow(report.id);
+                    try {
+                      await controller.toggleReportFollow(report.id);
+                    } catch (_) {
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Could not save your change. Please try again.',
+                          ),
+                        ),
+                      );
+                      return;
+                    }
+                    if (!context.mounted) return;
                   },
                   icon: Icon(
                     following
@@ -1109,10 +1135,23 @@ class _ResolutionConfirmation extends StatelessWidget {
             runSpacing: 10,
             children: <Widget>[
               FilledButton.icon(
-                onPressed: () {
-                  AppScope.of(
-                    context,
-                  ).confirmReportResolution(reportId, resolved: true);
+                onPressed: () async {
+                  try {
+                    await AppScope.of(
+                      context,
+                    ).confirmReportResolution(reportId, resolved: true);
+                  } catch (_) {
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Could not save your change. Please try again.',
+                        ),
+                      ),
+                    );
+                    return;
+                  }
+                  if (!context.mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text(
@@ -1125,10 +1164,23 @@ class _ResolutionConfirmation extends StatelessWidget {
                 label: const Text('Yes, resolved'),
               ),
               OutlinedButton.icon(
-                onPressed: () {
-                  AppScope.of(
-                    context,
-                  ).confirmReportResolution(reportId, resolved: false);
+                onPressed: () async {
+                  try {
+                    await AppScope.of(
+                      context,
+                    ).confirmReportResolution(reportId, resolved: false);
+                  } catch (_) {
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Could not save your change. Please try again.',
+                        ),
+                      ),
+                    );
+                    return;
+                  }
+                  if (!context.mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text(

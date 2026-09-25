@@ -1,3 +1,4 @@
+import '../../data/auth/auth_repository.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/constants/app_copy.dart';
@@ -213,10 +214,20 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController(
-    text: 'citizen@smart-sabha.lk',
-  );
-  final _passwordController = TextEditingController(text: 'demo12345');
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _initialized = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_initialized && AppScope.of(context).isDemoAuth) {
+      _emailController.text = 'citizen@smart-sabha.lk';
+      _passwordController.text = 'demo12345';
+    }
+    _initialized = true;
+  }
+
   bool _hidePassword = true;
   bool _submitting = false;
 
@@ -228,18 +239,25 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (_submitting || !_formKey.currentState!.validate()) return;
     setState(() => _submitting = true);
-    await AppScope.of(
-      context,
-    ).signIn(email: _emailController.text, password: _passwordController.text);
-    if (!mounted) return;
-    final controller = AppScope.of(context);
-    Navigator.pushNamedAndRemoveUntil(
-      context,
-      controller.isOfficer ? '/admin' : '/',
-      (route) => false,
-    );
+    try {
+      final controller = AppScope.of(context);
+      await controller.signIn(
+        email: _emailController.text,
+        password: _passwordController.text,
+      );
+      if (!mounted) return;
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        controller.isOfficer ? '/admin' : '/',
+        (route) => false,
+      );
+    } catch (error) {
+      if (mounted) _showAuthError(context, error);
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 
   void _setDemo(String email) {
@@ -314,31 +332,33 @@ class _LoginScreenState extends State<LoginScreen> {
                   : const Text('Sign in'),
             ),
             const SizedBox(height: 18),
-            const Divider(),
-            const SizedBox(height: 12),
-            const Text(
-              'Demo accounts',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: AppColors.muted,
-                fontWeight: FontWeight.w700,
+            if (AppScope.of(context).isDemoAuth) ...[
+              const Divider(),
+              const SizedBox(height: 12),
+              const Text(
+                'Demo accounts',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: AppColors.muted,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-            ),
-            const SizedBox(height: 10),
-            Wrap(
-              alignment: WrapAlignment.center,
-              spacing: 8,
-              children: <Widget>[
-                ActionChip(
-                  label: const Text('Citizen demo'),
-                  onPressed: () => _setDemo('citizen@smart-sabha.lk'),
-                ),
-                ActionChip(
-                  label: const Text('Officer demo'),
-                  onPressed: () => _setDemo('officer@smart-sabha.lk'),
-                ),
-              ],
-            ),
+              const SizedBox(height: 10),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                children: <Widget>[
+                  ActionChip(
+                    label: const Text('Citizen demo'),
+                    onPressed: () => _setDemo('citizen@smart-sabha.lk'),
+                  ),
+                  ActionChip(
+                    label: const Text('Officer demo'),
+                    onPressed: () => _setDemo('officer@smart-sabha.lk'),
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: 18),
             Wrap(
               alignment: WrapAlignment.center,
@@ -372,6 +392,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmController = TextEditingController();
+  bool _confirmationRequired = false;
   bool _accepted = false;
   bool _submitting = false;
 
@@ -395,16 +416,44 @@ class _RegisterScreenState extends State<RegisterScreen> {
       }
       return;
     }
+    if (_submitting) return;
     setState(() => _submitting = true);
-    await AppScope.of(
-      context,
-    ).register(fullName: _nameController.text, email: _emailController.text);
-    if (!mounted) return;
-    Navigator.pushNamedAndRemoveUntil(context, '/onboarding', (route) => false);
+    try {
+      final confirmationRequired = await AppScope.of(context).register(
+        fullName: _nameController.text,
+        email: _emailController.text,
+        password: _passwordController.text,
+      );
+      if (!mounted) return;
+      if (confirmationRequired) {
+        setState(() => _confirmationRequired = true);
+        return;
+      }
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        '/onboarding',
+        (route) => false,
+      );
+    } catch (error) {
+      if (mounted) _showAuthError(context, error);
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_confirmationRequired) {
+      return AuthScaffold(
+        title: 'Check your email',
+        subtitle:
+            'If registration is available for this address, follow the confirmation email before signing in.',
+        child: FilledButton(
+          onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
+          child: const Text('Back to sign in'),
+        ),
+      );
+    }
     return AuthScaffold(
       title: 'Create your citizen account',
       subtitle:
@@ -515,6 +564,20 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   bool _sent = false;
+  bool _submitting = false;
+
+  Future<void> _sendReset() async {
+    if (_submitting || !_formKey.currentState!.validate()) return;
+    setState(() => _submitting = true);
+    try {
+      await AppScope.of(context).sendPasswordReset(_emailController.text);
+      if (mounted) setState(() => _sent = true);
+    } catch (error) {
+      if (mounted) _showAuthError(context, error);
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -556,11 +619,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   ),
                   const SizedBox(height: 18),
                   FilledButton(
-                    onPressed: () {
-                      if (_formKey.currentState!.validate()) {
-                        setState(() => _sent = true);
-                      }
-                    },
+                    onPressed: _submitting ? null : _sendReset,
                     child: const Text('Send reset link'),
                   ),
                 ],
@@ -578,7 +637,23 @@ class ResetPasswordScreen extends StatefulWidget {
 }
 
 class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
+  bool _submitting = false;
   final _formKey = GlobalKey<FormState>();
+
+  Future<void> _updatePassword() async {
+    if (_submitting || !_formKey.currentState!.validate()) return;
+    setState(() => _submitting = true);
+    try {
+      await AppScope.of(context).updatePassword(_password.text);
+      if (!mounted) return;
+      Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+    } catch (error) {
+      if (mounted) _showAuthError(context, error);
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
   final _password = TextEditingController();
   final _confirmation = TextEditingController();
 
@@ -619,20 +694,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
             ),
             const SizedBox(height: 18),
             FilledButton(
-              onPressed: () {
-                if (_formKey.currentState!.validate()) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Password updated. You can now sign in.'),
-                    ),
-                  );
-                  Navigator.pushNamedAndRemoveUntil(
-                    context,
-                    '/login',
-                    (route) => false,
-                  );
-                }
-              },
+              onPressed: _submitting ? null : _updatePassword,
               child: const Text('Update password'),
             ),
           ],
@@ -700,4 +762,16 @@ class AuthScaffold extends StatelessWidget {
       ),
     );
   }
+}
+
+void _showAuthError(BuildContext context, Object error) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(
+        error is AuthenticationFailure
+            ? error.message
+            : 'Unable to complete authentication. Please try again.',
+      ),
+    ),
+  );
 }

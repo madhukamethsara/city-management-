@@ -1,3 +1,4 @@
+import '../../widgets/save_civic_action.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -565,7 +566,13 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                             'Sign in to follow a project and receive its updates.',
                       );
                     }
-                    controller.toggleProjectFollow(project.id);
+                    if (!await saveCivicAction(
+                      context,
+                      () => controller.toggleProjectFollow(project.id),
+                    )) {
+                      return;
+                    }
+                    if (!context.mounted) return;
                   },
                   icon: Icon(
                     following
