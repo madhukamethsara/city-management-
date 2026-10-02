@@ -56,3 +56,6 @@ app.*.map.json
 *.pfx
 **/key.properties
 /android/build/
+
+# Kotlin compiler caches
+/android/.kotlin/

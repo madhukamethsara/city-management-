@@ -1,9 +1,12 @@
+> Supabase authentication now also selects the persistent report repository. Complete [BACKEND_SETUP.md](BACKEND_SETUP.md), including the migration and reference data, before starting connected mode.
+
 # Authentication setup
 
-The app supports Supabase email/password authentication. Civic records and
-profiles still use the in-memory demo repository; this is not a production backend.
-Live accounts receive the citizen role until backend role permissions are added.
-Onboarding must be repeated after restarting until profile persistence is connected.
+The app supports Supabase email/password authentication. The connected report
+workflow and profiles use the persistent Supabase repository. New accounts start
+as citizens; authorised database administrators assign officer roles. Saved
+onboarding and database roles are restored after sign-in and app restart.
+See BACKEND_SETUP.md for the migration, deployment prerequisites, and release limits.
 
 ## Select the mode
 

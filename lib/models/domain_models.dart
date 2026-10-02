@@ -314,11 +314,13 @@ class PublicDocument {
     required this.name,
     required this.kind,
     required this.sizeLabel,
+    this.url,
   });
 
   final String name;
   final String kind;
   final String sizeLabel;
+  final String? url;
 }
 
 class Project {
@@ -344,6 +346,8 @@ class Project {
     this.imageLabels = const <String>[],
     this.contractor,
     this.projectManager,
+    this.authorityId = '',
+    this.revision = 0,
   });
 
   final String id;
@@ -367,6 +371,8 @@ class Project {
   final List<String> imageLabels;
   final String? contractor;
   final String? projectManager;
+  final String authorityId;
+  final int revision;
 
   int get remaining => budget - spent;
 
@@ -391,6 +397,8 @@ class Project {
     List<String>? imageLabels,
     String? contractor,
     String? projectManager,
+    String? authorityId,
+    int? revision,
   }) {
     return Project(
       id: id,
@@ -414,6 +422,8 @@ class Project {
       imageLabels: imageLabels ?? this.imageLabels,
       contractor: contractor ?? this.contractor,
       projectManager: projectManager ?? this.projectManager,
+      authorityId: authorityId ?? this.authorityId,
+      revision: revision ?? this.revision,
     );
   }
 }
@@ -452,6 +462,8 @@ class CivicReport {
     required this.followerIds,
     this.internalNotes = const <String>[],
     this.assignedOfficer,
+    this.revision = 0,
+    this.comments = const <CivicComment>[],
   });
 
   final String id;
@@ -472,6 +484,8 @@ class CivicReport {
   final List<ReportUpdate> updates;
   final Set<String> followerIds;
   final List<String> internalNotes;
+  final int revision;
+  final List<CivicComment> comments;
 
   CivicReport copyWith({
     ReportStatus? status,
@@ -479,10 +493,13 @@ class CivicReport {
     DateTime? lastUpdated,
     String? department,
     String? assignedOfficer,
+    bool clearAssignedOfficer = false,
     List<String>? attachments,
     List<ReportUpdate>? updates,
     Set<String>? followerIds,
     List<String>? internalNotes,
+    int? revision,
+    List<CivicComment>? comments,
   }) {
     return CivicReport(
       id: id,
@@ -498,11 +515,15 @@ class CivicReport {
       lastUpdated: lastUpdated ?? this.lastUpdated,
       department: department ?? this.department,
       ownerUserId: ownerUserId,
-      assignedOfficer: assignedOfficer ?? this.assignedOfficer,
+      assignedOfficer: clearAssignedOfficer
+          ? null
+          : assignedOfficer ?? this.assignedOfficer,
       attachments: attachments ?? this.attachments,
       updates: updates ?? this.updates,
       followerIds: followerIds ?? this.followerIds,
       internalNotes: internalNotes ?? this.internalNotes,
+      revision: revision ?? this.revision,
+      comments: comments ?? this.comments,
     );
   }
 }
@@ -518,6 +539,10 @@ class Announcement {
     required this.targetLabel,
     required this.isPinned,
     required this.isPublished,
+    this.authorityId = '',
+    this.revision = 0,
+    this.targetWard = '',
+    this.targetDivision = '',
   });
 
   final String id;
@@ -529,6 +554,10 @@ class Announcement {
   final String targetLabel;
   final bool isPinned;
   final bool isPublished;
+  final String authorityId;
+  final int revision;
+  final String targetWard;
+  final String targetDivision;
 
   Announcement copyWith({
     String? title,
@@ -539,6 +568,10 @@ class Announcement {
     String? targetLabel,
     bool? isPinned,
     bool? isPublished,
+    String? authorityId,
+    int? revision,
+    String? targetWard,
+    String? targetDivision,
   }) => Announcement(
     id: id,
     title: title ?? this.title,
@@ -549,6 +582,10 @@ class Announcement {
     targetLabel: targetLabel ?? this.targetLabel,
     isPinned: isPinned ?? this.isPinned,
     isPublished: isPublished ?? this.isPublished,
+    authorityId: authorityId ?? this.authorityId,
+    revision: revision ?? this.revision,
+    targetWard: targetWard ?? this.targetWard,
+    targetDivision: targetDivision ?? this.targetDivision,
   );
 }
 
@@ -565,6 +602,7 @@ class FeedItem {
     required this.commentCount,
     required this.reactedUserIds,
     required this.savedUserIds,
+    this.comments = const [],
   });
 
   final String id;
@@ -578,12 +616,14 @@ class FeedItem {
   final int commentCount;
   final Set<String> reactedUserIds;
   final Set<String> savedUserIds;
+  final List<CivicComment> comments;
 
   FeedItem copyWith({
     int? reactionCount,
     int? commentCount,
     Set<String>? reactedUserIds,
     Set<String>? savedUserIds,
+    List<CivicComment>? comments,
   }) {
     return FeedItem(
       id: id,
@@ -597,6 +637,7 @@ class FeedItem {
       commentCount: commentCount ?? this.commentCount,
       reactedUserIds: reactedUserIds ?? this.reactedUserIds,
       savedUserIds: savedUserIds ?? this.savedUserIds,
+      comments: comments ?? this.comments,
     );
   }
 }

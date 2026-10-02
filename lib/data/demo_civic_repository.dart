@@ -1,7 +1,7 @@
 import '../models/domain_models.dart';
 import 'civic_repository.dart';
 
-class DemoCivicRepository implements CivicRepository {
+class DemoCivicRepository extends CivicRepository {
   final Map<String, Announcement> _savedAnnouncements = {};
   Future<InitialCivicData>? _seed;
   final Map<String, CivicReport> _savedReports = {};
@@ -57,6 +57,7 @@ class DemoCivicRepository implements CivicRepository {
           (item) => item.copyWith(
             reactedUserIds: Set.unmodifiable(item.reactedUserIds),
             savedUserIds: Set.unmodifiable(item.savedUserIds),
+            comments: List.unmodifiable(item.comments),
           ),
         ),
       ),
@@ -176,6 +177,7 @@ class DemoCivicRepository implements CivicRepository {
     updates: List.unmodifiable(report.updates),
     followerIds: Set.unmodifiable(report.followerIds),
     internalNotes: List.unmodifiable(report.internalNotes),
+    comments: List.unmodifiable(report.comments),
   );
 
   Future<InitialCivicData> _loadSeedData() async {

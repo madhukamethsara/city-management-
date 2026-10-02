@@ -1,4 +1,5 @@
 import '../../widgets/save_civic_action.dart';
+import 'connected_project_list.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -57,6 +58,18 @@ class _ProjectExplorerScreenState extends State<ProjectExplorerScreen> {
   @override
   Widget build(BuildContext context) {
     final controller = AppScope.of(context);
+    if (controller.usesPersistentData) {
+      final list = ConnectedProjectList(
+        onOpen: (project) =>
+            Navigator.pushNamed(context, '/projects/${project.id}'),
+      );
+      return widget.embedded
+          ? list
+          : Scaffold(
+              appBar: AppBar(title: const Text('Projects')),
+              body: list,
+            );
+    }
     final projects = _filteredProjects(controller.projects);
     final page = ResponsivePage(
       child: Column(
@@ -461,6 +474,22 @@ class ProjectDetailScreen extends StatefulWidget {
 class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   final _commentController = TextEditingController();
   final _comments = <CivicComment>[];
+  Future<void>? _load;
+  int? _dataRevision;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final controller = AppScope.of(context);
+    if (controller.usesPersistentData &&
+        _dataRevision != controller.dataRevision) {
+      _dataRevision = controller.dataRevision;
+      _load = Future<void>.delayed(
+        Duration.zero,
+        () => controller.loadProject(widget.projectId),
+      );
+    }
+  }
 
   @override
   void dispose() {
@@ -470,6 +499,41 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final controller = AppScope.of(context);
+    if (controller.usesPersistentData) {
+      return FutureBuilder<void>(
+        future: _load,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done ||
+              snapshot.hasError) {
+            return Scaffold(
+              appBar: AppBar(title: const Text('Project details')),
+              body: Center(
+                child: snapshot.hasError
+                    ? Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text('Unable to load this project.'),
+                          TextButton(
+                            onPressed: () => setState(() {
+                              _load = controller.loadProject(widget.projectId);
+                            }),
+                            child: const Text('Retry'),
+                          ),
+                        ],
+                      )
+                    : const CircularProgressIndicator(),
+              ),
+            );
+          }
+          return _buildDetail(context);
+        },
+      );
+    }
+    return _buildDetail(context);
+  }
+
+  Widget _buildDetail(BuildContext context) {
     final controller = AppScope.of(context);
     final project = controller.projectById(widget.projectId);
     if (project == null) {
@@ -483,6 +547,14 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       appBar: AppBar(
         title: const Text('Project details'),
         actions: <Widget>[
+          if (controller.usesPersistentData)
+            IconButton(
+              tooltip: 'Refresh project',
+              icon: const Icon(Icons.refresh),
+              onPressed: () => setState(() {
+                _load = controller.loadProject(widget.projectId);
+              }),
+            ),
           IconButton(
             onPressed: () => _share(context, project),
             icon: const Icon(Icons.ios_share_outlined),
@@ -636,7 +708,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
             else
               ...project.documents.map(
                 (document) => CivicCard(
-                  onTap: () => _copyDocumentName(context, document.name),
+                  onTap: () => _copyDocument(context, document),
                   child: Row(
                     children: <Widget>[
                       const Icon(
@@ -664,49 +736,48 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                           ],
                         ),
                       ),
-                      const Icon(
-                        Icons.download_outlined,
-                        color: AppColors.deepGreen,
-                      ),
+                      const Icon(Icons.link, color: AppColors.deepGreen),
                     ],
                   ),
                 ),
               ),
             const SizedBox(height: 24),
-            const SectionTitle(title: 'Citizen feedback'),
-            const SizedBox(height: 10),
-            _CommentComposer(
-              controller: _commentController,
-              onSend: () {
-                if (!controller.canParticipate) {
-                  showSignInPrompt(context);
-                  return;
-                }
-                if (_commentController.text.trim().isEmpty) return;
-                setState(() {
-                  _comments.add(
-                    CivicComment(
-                      id: 'comment-${DateTime.now().microsecondsSinceEpoch}',
-                      author: controller.currentUser!.isVerified
-                          ? 'Verified Resident · ${controller.currentUser!.ward}'
-                          : 'Resident',
-                      message: _commentController.text.trim(),
-                      createdAt: DateTime.now(),
-                      isVerified: controller.currentUser!.isVerified,
-                    ),
-                  );
-                  _commentController.clear();
-                });
-              },
-            ),
-            const SizedBox(height: 12),
-            if (_comments.isEmpty)
-              const Text(
-                'Be the first to add respectful, project-related feedback.',
-                style: TextStyle(color: AppColors.muted),
-              )
-            else
-              ..._comments.map((comment) => _CommentCard(comment: comment)),
+            if (!controller.usesPersistentData) ...[
+              const SectionTitle(title: 'Citizen feedback'),
+              const SizedBox(height: 10),
+              _CommentComposer(
+                controller: _commentController,
+                onSend: () {
+                  if (!controller.canParticipate) {
+                    showSignInPrompt(context);
+                    return;
+                  }
+                  if (_commentController.text.trim().isEmpty) return;
+                  setState(() {
+                    _comments.add(
+                      CivicComment(
+                        id: 'comment-${DateTime.now().microsecondsSinceEpoch}',
+                        author: controller.currentUser!.isVerified
+                            ? 'Verified Resident · ${controller.currentUser!.ward}'
+                            : 'Resident',
+                        message: _commentController.text.trim(),
+                        createdAt: DateTime.now(),
+                        isVerified: controller.currentUser!.isVerified,
+                      ),
+                    );
+                    _commentController.clear();
+                  });
+                },
+              ),
+              const SizedBox(height: 12),
+              if (_comments.isEmpty)
+                const Text(
+                  'Be the first to add respectful, project-related feedback.',
+                  style: TextStyle(color: AppColors.muted),
+                )
+              else
+                ..._comments.map((comment) => _CommentCard(comment: comment)),
+            ],
             const SizedBox(height: 20),
           ],
         ),
@@ -725,13 +796,18 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     }
   }
 
-  Future<void> _copyDocumentName(BuildContext context, String name) async {
-    await Clipboard.setData(ClipboardData(text: name));
+  Future<void> _copyDocument(
+    BuildContext context,
+    PublicDocument document,
+  ) async {
+    await Clipboard.setData(ClipboardData(text: document.url ?? document.name));
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '$name is ready to download when the document service is connected.',
+            document.url == null
+                ? 'Demo document name copied.'
+                : 'Document link copied. Open it in your browser.',
           ),
         ),
       );

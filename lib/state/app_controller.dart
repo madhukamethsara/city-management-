@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'dart:math';
 
 import '../data/auth/auth_repository.dart';
@@ -5,6 +7,7 @@ import '../data/auth/auth_repository.dart';
 import 'package:flutter/foundation.dart';
 
 import '../data/civic_repository.dart';
+import '../data/civic_failure.dart';
 import '../models/domain_models.dart';
 
 class OnboardingDraft {
@@ -36,8 +39,10 @@ class ReportDraft {
     required this.location,
     required this.urgency,
     required this.attachmentNames,
+    this.requestId,
   });
 
+  final String? requestId;
   final String category;
   final String title;
   final String description;
@@ -94,6 +99,9 @@ class AnnouncementDraft {
     required this.type,
     required this.department,
     required this.targetLabel,
+    this.requestId,
+    this.targetWard = '',
+    this.targetDivision = '',
   });
 
   final String title;
@@ -101,6 +109,9 @@ class AnnouncementDraft {
   final AnnouncementType type;
   final String department;
   final String targetLabel;
+  final String? requestId;
+  final String targetWard;
+  final String targetDivision;
 }
 
 class AppController extends ChangeNotifier {
@@ -113,24 +124,124 @@ class AppController extends ChangeNotifier {
   bool get isDemoAuth => _auth == null;
   bool get needsPasswordRecovery => _auth?.needsPasswordRecovery ?? false;
   String get sessionKey =>
-      '${_currentUser?.id ?? "signed-out"}:$needsPasswordRecovery';
+      '${_currentUser?.id ?? "signed-out"}:${_currentUser?.role.name}:${_currentUser?.onboardingComplete}:$needsPasswordRecovery';
+
+  bool get usesPersistentData => _repository.isPersistent;
+  int _sessionGeneration = 0;
+  int _refreshSequence = 0;
+  int _projectReadSequence = 0;
+  int _announcementReadSequence = 0;
+  int _announcementOffset = 0;
+  int _announcementTotal = 0;
+  bool get hasMoreAnnouncements => _announcementOffset < _announcementTotal;
+  int _dataRevision = 0;
+  int get dataRevision => _dataRevision;
+  Future<void>? _sessionLoad;
+  bool _disposed = false;
 
   void _authChanged() {
     final incoming = _auth!.currentUser;
-    if (incoming != null && incoming.id == _currentUser?.id) {
+    final changed = incoming?.id != _currentUser?.id;
+    if (incoming != null && !changed) {
       _currentUser = _currentUser!.copyWith(
         email: incoming.email,
-        role: incoming.role,
+        role: usesPersistentData ? _currentUser!.role : incoming.role,
         isActive: incoming.isActive,
       );
     } else {
       _currentUser = incoming;
     }
+    if (changed && usesPersistentData) {
+      _sessionGeneration++;
+      _clearSessionData();
+      if (!_bootstrapInProgress) {
+        _sessionLoad = _loadSession();
+      }
+    }
     notifyListeners();
   }
 
+  void _clearSessionData() {
+    _users = [];
+    _departments = [];
+    _reports = [];
+    _notifications = [];
+    _projects = [];
+    ++_announcementReadSequence;
+    _announcementOffset = 0;
+    _announcementTotal = 0;
+    _announcements = [];
+    _feedItems = [];
+    _proposals = [];
+    _consultations = [];
+  }
+
+  Future<void> _loadSession() async {
+    final generation = _sessionGeneration;
+    isLoading = true;
+    startupError = null;
+    try {
+      await refreshData();
+    } catch (_) {
+      if (generation == _sessionGeneration && !_disposed) {
+        startupError = 'We could not load your account. Please try again.';
+      }
+    } finally {
+      if (generation == _sessionGeneration && !_disposed) {
+        isLoading = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  void _applyData(InitialCivicData data) {
+    ++_dataRevision;
+    ++_projectReadSequence;
+    _authorities = data.authorities;
+    _departments = data.departments;
+    _users = data.users;
+    _projects = data.projects;
+    _reports = data.reports;
+    ++_announcementReadSequence;
+    _announcementOffset = data.announcements.length;
+    _announcementTotal = data.announcementTotal;
+    _announcements = data.announcements;
+    _feedItems = data.feedItems;
+    _proposals = data.proposals;
+    _consultations = data.consultations;
+    _notifications = data.notifications;
+    if (usesPersistentData && _currentUser != null && !isGuest) {
+      final profile = _firstOrNull(_users, (u) => u.id == _currentUser!.id);
+      if (profile == null || !profile.isActive) {
+        _clearSessionData();
+        throw const CivicFailure('Your account is unavailable.');
+      }
+      _currentUser = profile;
+    }
+  }
+
+  Future<void> refreshData() async {
+    final sequence = ++_refreshSequence;
+    final generation = _sessionGeneration;
+    final data = await _repository.loadInitialData();
+    if (_disposed ||
+        generation != _sessionGeneration ||
+        sequence != _refreshSequence) {
+      return;
+    }
+    _applyData(data);
+    notifyListeners();
+  }
+
+  Future<String> uploadReportPhoto(String name, Uint8List bytes) =>
+      _repository.uploadReportPhoto(name, bytes);
+  Future<String?> reportPhotoUrl(String path) =>
+      _repository.reportPhotoUrl(path);
+
   @override
   void dispose() {
+    _disposed = true;
+    _sessionGeneration++;
     _auth?.removeListener(_authChanged);
     _auth?.dispose();
     super.dispose();
@@ -227,17 +338,7 @@ class AppController extends ChangeNotifier {
     notifyListeners();
     try {
       await _auth?.initialize();
-      final data = await _repository.loadInitialData();
-      _authorities = data.authorities;
-      _departments = data.departments;
-      _users = data.users;
-      _projects = data.projects;
-      _reports = data.reports;
-      _announcements = data.announcements;
-      _feedItems = data.feedItems;
-      _proposals = data.proposals;
-      _consultations = data.consultations;
-      _notifications = data.notifications;
+      await refreshData();
     } on AuthenticationFailure catch (error) {
       startupError = error.message;
     } catch (_) {
@@ -253,6 +354,7 @@ class AppController extends ChangeNotifier {
     if (_auth != null) {
       await _auth.signIn(email: email, password: password);
       _authChanged();
+      await _sessionLoad;
       return;
     }
     final normalizedEmail = email.trim().toLowerCase();
@@ -284,6 +386,7 @@ class AppController extends ChangeNotifier {
         password: password,
       );
       _authChanged();
+      await _sessionLoad;
       return confirmationRequired;
     }
     if (_users.any(
@@ -315,6 +418,11 @@ class AppController extends ChangeNotifier {
   }
 
   void continueAsGuest() {
+    if (usesPersistentData) {
+      if (_auth?.currentUser != null) return;
+      _sessionGeneration++;
+      _clearSessionData();
+    }
     _currentUser = const AppUser(
       id: 'guest',
       fullName: 'Guest',
@@ -334,6 +442,7 @@ class AppController extends ChangeNotifier {
   Future<void> signOut() async {
     if (_auth != null && !isGuest) await _auth.signOut();
     _currentUser = null;
+    await _sessionLoad;
     notifyListeners();
   }
 
@@ -372,6 +481,7 @@ class AppController extends ChangeNotifier {
       onboardingComplete: true,
     );
     await _commit(CivicChanges(users: [updated]));
+    if (usesPersistentData) await refreshData();
     notifyListeners();
   }
 
@@ -417,13 +527,19 @@ class AppController extends ChangeNotifier {
     if (user == null || user.isGuest) return;
     final project = projectById(projectId);
     if (project == null) return;
-    final followers = Set<String>.from(project.followerIds);
-    followers.contains(user.id)
-        ? followers.remove(user.id)
-        : followers.add(user.id);
-    await _commit(
-      CivicChanges(projects: [project.copyWith(followerIds: followers)]),
+    if (!user.isActive) {
+      throw const CivicFailure('Your account is unavailable.');
+    }
+    final generation = _sessionGeneration;
+    ++_projectReadSequence;
+    final saved = await _repository.followProject(
+      project,
+      user.id,
+      !project.followerIds.contains(user.id),
     );
+    _checkSession(generation);
+    ++_projectReadSequence;
+    _projects = _mergeRecords(_projects, [saved], (p) => p.id);
     notifyListeners();
   }
 
@@ -435,57 +551,104 @@ class AppController extends ChangeNotifier {
     followers.contains(user.id)
         ? followers.remove(user.id)
         : followers.add(user.id);
-    _replaceReport(
-      await _repository.updateReport(report.copyWith(followerIds: followers)),
+    final generation = _sessionGeneration;
+    final saved = await _repository.updateReport(
+      report.copyWith(followerIds: followers),
     );
+    _checkSession(generation);
+    _replaceReport(saved);
     notifyListeners();
   }
 
-  Future<void> toggleFeedReaction(String feedId) async {
+  Future<void> loadMoreAnnouncements() async {
+    final generation = _sessionGeneration;
+    final sequence = ++_announcementReadSequence;
+    final page = await _repository.listAnnouncements(
+      offset: _announcementOffset,
+    );
+    _checkSession(generation, isMutation: false);
+    if (sequence != _announcementReadSequence) return;
+    _announcementOffset += page.announcements.length;
+    _announcementTotal = page.total;
+    _announcements = {
+      for (final a in _announcements) a.id: a,
+      for (final a in page.announcements) a.id: a,
+    }.values.toList();
+    _feedItems = {
+      for (final f in _feedItems) f.id: f,
+      for (final f in page.feedItems) f.id: f,
+    }.values.toList();
+    notifyListeners();
+  }
+
+  Future<Announcement?> fetchAnnouncement(String id) async {
+    final generation = _sessionGeneration;
+    final result = await _repository.getAnnouncement(id);
+    _checkSession(generation, isMutation: false);
+    return result;
+  }
+
+  Future<void> _updateFeed(
+    String id,
+    Future<FeedItem> Function(FeedItem, AppUser) action,
+  ) async {
     final user = _currentUser;
-    if (user == null || user.isGuest) return;
-    final item = _firstOrNull(_feedItems, (entry) => entry.id == feedId);
-    if (item == null) return;
-    final reacted = Set<String>.from(item.reactedUserIds);
-    final isRemoving = reacted.contains(user.id);
-    isRemoving ? reacted.remove(user.id) : reacted.add(user.id);
-    await _commit(
-      CivicChanges(
-        feedItems: [
-          item.copyWith(
-            reactionCount: item.reactionCount + (isRemoving ? -1 : 1),
-            reactedUserIds: reacted,
-          ),
-        ],
+    final item = _firstOrNull(_feedItems, (entry) => entry.id == id);
+    if (user == null || user.isGuest || item == null) return;
+    if (!user.isActive) {
+      throw const CivicFailure('Your account is unavailable.');
+    }
+    final generation = _sessionGeneration;
+    ++_announcementReadSequence;
+    final saved = await action(item, user);
+    _checkSession(generation);
+    ++_announcementReadSequence;
+    _feedItems = _mergeRecords(_feedItems, [saved], (f) => f.id);
+    notifyListeners();
+  }
+
+  Future<void> toggleFeedReaction(String feedId) => _updateFeed(
+    feedId,
+    (item, user) => _repository.updateFeedPreference(
+      item,
+      user.id,
+      reacted: !item.reactedUserIds.contains(user.id),
+    ),
+  );
+
+  Future<void> toggleFeedSave(String feedId) => _updateFeed(
+    feedId,
+    (item, user) => _repository.updateFeedPreference(
+      item,
+      user.id,
+      saved: !item.savedUserIds.contains(user.id),
+    ),
+  );
+
+  Future<void> addFeedComment(
+    String feedId,
+    String message, {
+    String? requestId,
+  }) async {
+    final text = message.trim();
+    if (text.isEmpty || text.length > 2000) {
+      throw const CivicFailure(
+        'Write a comment between 1 and 2000 characters.',
+      );
+    }
+    await _updateFeed(
+      feedId,
+      (item, user) => _repository.addFeedComment(
+        item,
+        CivicComment(
+          id: requestId ?? 'c-${DateTime.now().microsecondsSinceEpoch}',
+          author: user.fullName,
+          message: text,
+          createdAt: DateTime.now(),
+          isVerified: user.isVerified,
+        ),
       ),
     );
-    notifyListeners();
-  }
-
-  Future<void> toggleFeedSave(String feedId) async {
-    final user = _currentUser;
-    if (user == null || user.isGuest) return;
-    final item = _firstOrNull(_feedItems, (entry) => entry.id == feedId);
-    if (item == null) return;
-    final saved = Set<String>.from(item.savedUserIds);
-    saved.contains(user.id) ? saved.remove(user.id) : saved.add(user.id);
-    await _commit(
-      CivicChanges(feedItems: [item.copyWith(savedUserIds: saved)]),
-    );
-    notifyListeners();
-  }
-
-  Future<void> addFeedComment(String feedId) async {
-    final user = _currentUser;
-    if (user == null || user.isGuest) return;
-    final item = _firstOrNull(_feedItems, (entry) => entry.id == feedId);
-    if (item == null) return;
-    await _commit(
-      CivicChanges(
-        feedItems: [item.copyWith(commentCount: item.commentCount + 1)],
-      ),
-    );
-    notifyListeners();
   }
 
   Future<CivicReport> submitReport(ReportDraft draft) async {
@@ -496,7 +659,7 @@ class AppController extends ChangeNotifier {
     final today = DateTime.now();
     final caseNumber = 'SS-${today.year}-${(1000 + _random.nextInt(8999))}';
     final report = CivicReport(
-      id: 'r-${today.microsecondsSinceEpoch}',
+      id: draft.requestId ?? 'r-${today.microsecondsSinceEpoch}',
       caseNumber: caseNumber,
       title: draft.title,
       description: draft.description,
@@ -532,12 +695,19 @@ class AppController extends ChangeNotifier {
         route: '/reports/${report.id}',
       ),
     ];
+    final generation = _sessionGeneration;
     final savedReport = await _repository.createReport(
       report,
       notifications: notifications,
     );
-    _reports = <CivicReport>[savedReport, ..._reports];
-    _notifications = [...notifications, ..._notifications];
+    _checkSession(generation);
+    _reports = <CivicReport>[
+      savedReport,
+      ..._reports.where((r) => r.id != savedReport.id),
+    ];
+    if (!usesPersistentData) {
+      _notifications = [...notifications, ..._notifications];
+    }
     notifyListeners();
     return savedReport;
   }
@@ -551,9 +721,15 @@ class AppController extends ChangeNotifier {
     required String publicUpdate,
     List<String>? attachmentNames,
     String? internalNote,
+    int? expectedRevision,
   }) async {
     final report = reportById(reportId);
     if (report == null) return;
+    if (expectedRevision != null && expectedRevision != report.revision) {
+      throw const CivicFailure(
+        'This case changed. Close this editor, refresh, and review the latest update.',
+      );
+    }
     final now = DateTime.now();
     final updates = <ReportUpdate>[
       ...report.updates,
@@ -579,12 +755,14 @@ class AppController extends ChangeNotifier {
         ),
       ];
     }
+    final generation = _sessionGeneration;
     final savedReport = await _repository.updateReport(
       report.copyWith(
         status: status,
         department: department,
         priority: priority,
         assignedOfficer: assignedOfficer,
+        clearAssignedOfficer: assignedOfficer == null,
         lastUpdated: now,
         attachments: attachmentNames == null
             ? report.attachments
@@ -596,8 +774,11 @@ class AppController extends ChangeNotifier {
       ),
       notifications: notifications,
     );
+    _checkSession(generation);
     _replaceReport(savedReport);
-    _notifications = [...notifications, ..._notifications];
+    if (!usesPersistentData) {
+      _notifications = [...notifications, ..._notifications];
+    }
     notifyListeners();
   }
 
@@ -611,6 +792,7 @@ class AppController extends ChangeNotifier {
     final message = resolved
         ? 'The resident confirmed that this issue is resolved.'
         : 'The resident reported that the issue still needs attention.';
+    final generation = _sessionGeneration;
     final savedReport = await _repository.updateReport(
       report.copyWith(
         status: resolved ? ReportStatus.resolved : ReportStatus.inProgress,
@@ -626,7 +808,37 @@ class AppController extends ChangeNotifier {
         ],
       ),
     );
+    _checkSession(generation);
     _replaceReport(savedReport);
+    notifyListeners();
+  }
+
+  Future<void> addReportComment(String reportId, String message) async {
+    final report = reportById(reportId);
+    final user = currentUser;
+    if (report == null || user == null || user.isGuest) {
+      throw const CivicFailure('Sign in to comment.');
+    }
+    if (message.trim().isEmpty || message.trim().length > 2000) {
+      throw const CivicFailure('Write a comment of up to 2,000 characters.');
+    }
+    final generation = _sessionGeneration;
+    final saved = await _repository.updateReport(
+      report.copyWith(
+        comments: [
+          ...report.comments,
+          CivicComment(
+            id: 'rc-${DateTime.now().microsecondsSinceEpoch}',
+            author: user.isOfficer ? 'Authority officer' : 'Resident',
+            message: message.trim(),
+            createdAt: DateTime.now(),
+            isVerified: user.isVerified,
+          ),
+        ],
+      ),
+    );
+    _checkSession(generation);
+    _replaceReport(saved);
     notifyListeners();
   }
 
@@ -752,8 +964,46 @@ class AppController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<ProjectPage> searchProjects({
+    String search = '',
+    ProjectStatus? status,
+    String sort = 'Latest',
+    int offset = 0,
+  }) async {
+    final generation = _sessionGeneration;
+    final sequence = ++_projectReadSequence;
+    final page = await _repository.listProjects(
+      search: search,
+      status: status,
+      sort: sort,
+      offset: offset,
+    );
+    _checkSession(generation, isMutation: false);
+    if (sequence == _projectReadSequence) {
+      _projects = _mergeRecords(_projects, page.projects, (p) => p.id);
+    }
+    notifyListeners();
+    return page;
+  }
+
+  Future<void> loadProject(String id) async {
+    final generation = _sessionGeneration;
+    final sequence = ++_projectReadSequence;
+    final project = await _repository.getProject(id);
+    _checkSession(generation, isMutation: false);
+    if (project != null && sequence == _projectReadSequence) {
+      _projects = _mergeRecords(_projects, [project], (p) => p.id);
+    }
+    notifyListeners();
+  }
+
   Future<void> saveProject(Project project) async {
+    if (!isOfficer || _currentUser?.isActive != true) {
+      throw const CivicFailure('An active officer account is required.');
+    }
+    ++_projectReadSequence;
     await _commit(CivicChanges(projects: [project]));
+    ++_projectReadSequence;
     notifyListeners();
   }
 
@@ -767,6 +1017,7 @@ class AppController extends ChangeNotifier {
     final now = DateTime.now();
     final project = Project(
       id: 'p-${now.microsecondsSinceEpoch}',
+      authorityId: _currentUser?.localAuthorityId ?? '',
       title: draft.title,
       description: draft.description,
       category: draft.category,
@@ -801,7 +1052,10 @@ class AppController extends ChangeNotifier {
     bool publishNow = false,
   }) async {
     final announcement = Announcement(
-      id: 'a-${DateTime.now().microsecondsSinceEpoch}',
+      id: draft.requestId ?? 'a-${DateTime.now().microsecondsSinceEpoch}',
+      authorityId: _currentUser?.localAuthorityId ?? '',
+      targetWard: draft.targetWard,
+      targetDivision: draft.targetDivision,
       title: draft.title,
       body: draft.body,
       type: draft.type,
@@ -812,7 +1066,7 @@ class AppController extends ChangeNotifier {
       isPublished: publishNow,
     );
     var notifications = <AppNotification>[];
-    if (publishNow) {
+    if (publishNow && !usesPersistentData) {
       notifications = <AppNotification>[
         AppNotification(
           id: 'n-announcement-${DateTime.now().microsecondsSinceEpoch}',
@@ -902,6 +1156,15 @@ class AppController extends ChangeNotifier {
     return results;
   }
 
+  void _checkSession(int generation, {bool isMutation = true}) {
+    if (_disposed || generation != _sessionGeneration) {
+      throw const CivicFailure(
+        'Your session changed. Sign in again to check the saved result.',
+      );
+    }
+    if (isMutation) _refreshSequence++;
+  }
+
   void _replaceReport(CivicReport updated) {
     _reports = _reports
         .map((item) => item.id == updated.id ? updated : item)
@@ -909,7 +1172,25 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> _commit(CivicChanges changes) async {
+    final generation = _sessionGeneration;
+    if (changes.announcements.isNotEmpty) ++_announcementReadSequence;
     final saved = await _repository.saveChanges(changes);
+    _checkSession(generation);
+    if (saved.announcements.isNotEmpty) {
+      ++_announcementReadSequence;
+      final newCount = saved.announcements
+          .where((a) => announcementById(a.id) == null)
+          .length;
+      _announcementOffset += newCount;
+      _announcementTotal += newCount;
+      final unpublished = saved.announcements
+          .where((a) => !a.isPublished)
+          .map((a) => a.id)
+          .toSet();
+      _feedItems = _feedItems
+          .where((f) => !unpublished.contains(f.id))
+          .toList();
+    }
     _announcements = _mergeRecords(
       _announcements,
       saved.announcements,

@@ -4,7 +4,7 @@ Smart Sabha is a mobile-first civic engagement application for Sri Lankan Prades
 
 It gives residents one place to discover public projects, see them on an OpenStreetMap map, report local issues, track their cases, receive local announcements, submit community proposals, and take part in public consultations. Authorised officers receive a separate management console.
 
-> **Frontend delivery:** this project is fully interactive with a clean repository boundary and seeded local data. Replace `DemoCivicRepository` with a Supabase/REST implementation when the backend is ready; the screens do not query mock data directly.
+> **Two modes:** demo mode includes all civic screens with seeded in-memory data. Supabase mode connects reports, projects, announcements, feed participation, profiles, private evidence and notifications to persistent storage. Apply all three migrations and follow [backend setup](BACKEND_SETUP.md) before using configured Supabase credentials. See [the roadmap](ROADMAP.md) for remaining modules.
 
 ## Included functionality
 
@@ -41,7 +41,7 @@ It gives residents one place to discover public projects, see them on an OpenStr
 | Citizen | `citizen@smart-sabha.lk` | `demo12345` |
 | Officer | `officer@smart-sabha.lk` | `demo12345` |
 
-Demo sign-in checks the listed credentials. Supabase authentication is available when configured; see [authentication setup](AUTH_SETUP.md) for project settings, callback URLs, and live verification. Civic data remains in memory.
+Demo sign-in checks the listed credentials. Supabase authentication is available when configured; see [authentication setup](AUTH_SETUP.md) for project settings, callback URLs, and live verification. Connected report data is persistent after completing [backend setup](BACKEND_SETUP.md). Projects are also persistent, including officer edits, budget privacy, public document links, subscriptions and paginated search. Announcements and their public feed are also persistent, including geographic targeting, comments, reactions and saves. Proposals and consultations remain demo-only.
 
 ## Folder structure
 
@@ -104,36 +104,24 @@ flutter run \
 
 Never bundle a Supabase service-role key in this mobile application.
 
-## Backend hand-off
+## Backend status
 
-`CivicRepository` in `lib/data/civic_repository.dart` defines initial loading,
-report create/update operations, and atomic `CivicChanges` batches. Existing
-controller writes for profiles, onboarding, projects, announcements, departments,
-user administration, feed reactions/saves/comment counts, proposals, consultation
-participation, and notifications await repository success before updating state.
-Related records are saved together: report updates, new published announcements,
-and consultation participation include their generated notifications.
+`SupabaseCivicRepository` implements the first connected workflow: resident
+report submission, authority-scoped officer review, comments/evidence, case
+tracking, private notes, and recipient-scoped notifications. Profiles restore
+onboarding and database-assigned roles. Server functions enforce permissions
+and transaction boundaries. Client state is cleared on account changes.
 
-`DemoCivicRepository` retains these writes for its lifetime; restarting the app
-resets them. Forms stay open on save failure and show a retry message. The project
-editor builds a complete record before saving it in one operation.
+`DemoCivicRepository` continues to support the full feature demonstration.
+Connected mode never silently falls back to demo records. Projects now support
+authority-scoped officer edits, milestones, private/public updates and budgets,
+public HTTPS document links, following and transactional notifications. Resident
+and officer listings use server-side search, sorting and pagination. Project image
+uploads and feedback remain deferred. Announcements support drafts, publication, ward/GN division targeting and recipient notifications. Their feed persists comments, reactions and saved updates. Proposals, consultations and broader administration are not connected yet.
 
-Supabase authentication is implemented separately from civic data. Live project
-verification, durable storage, authority-scoped permissions, and notification
-recipient isolation are still pending. The current consultation model records
-participation only; storing answer text remains a separate feature. Feed comments
-still record counts, and project/report comment text remains screen-local.
-
-`CivicRepository` is the frontend data boundary. `DemoCivicRepository` provides working local interactions so every screen can be tested immediately. For production:
-
-1. Implement a Supabase/REST repository behind `CivicRepository`.
-2. Configure Supabase authentication and verify session restoration and reset links (see AUTH_SETUP.md).
-3. Persist the typed models in the required multi-tenant tables, always scoped by `local_authority_id`.
-4. Upload photo/video/document bytes to private/public Supabase Storage buckets as appropriate.
-5. Subscribe to report, project, and announcement notification channels for realtime updates.
-6. Enforce row-level security for resident, officer, department-admin, and platform-admin roles.
-
-The UI already keeps sensitive fields private: exact residential location, phone number, email address, internal complaint notes, and account metadata are not rendered in public resident views.
+Read [BACKEND_SETUP.md](BACKEND_SETUP.md) to apply all three migrations, provision a
+staging authority/officer, run the database tests, and verify deployment.
+Read [ROADMAP.md](ROADMAP.md) for remaining frontend/backend and release work.
 
 ## Quality checks
 

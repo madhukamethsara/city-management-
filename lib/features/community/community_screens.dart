@@ -1,4 +1,5 @@
 import '../../widgets/save_civic_action.dart';
+import 'announcement_controls.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -37,6 +38,7 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
               subtitle:
                   'Official notices and service information for your selected area.',
             ),
+            const AnnouncementControls(),
             const SizedBox(height: 14),
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
@@ -88,14 +90,89 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
   }
 }
 
-class AnnouncementDetailScreen extends StatelessWidget {
+class AnnouncementDetailScreen extends StatefulWidget {
   const AnnouncementDetailScreen({super.key, required this.announcementId});
-
   final String announcementId;
+  @override
+  State<AnnouncementDetailScreen> createState() =>
+      _AnnouncementDetailScreenState();
+}
+
+class _AnnouncementDetailScreenState extends State<AnnouncementDetailScreen> {
+  Future<Announcement?>? _load;
+  String? _session;
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final controller = AppScope.of(context);
+    if (_load == null || _session != controller.sessionKey) {
+      _session = controller.sessionKey;
+      _load = controller.usesPersistentData
+          ? controller.fetchAnnouncement(widget.announcementId)
+          : Future.value(controller.announcementById(widget.announcementId));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final announcement = AppScope.of(context).announcementById(announcementId);
+    final controller = AppScope.of(context);
+    return FutureBuilder<Announcement?>(
+      future: _load,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return Scaffold(
+            appBar: AppBar(title: const Text('Announcement')),
+            body: const Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (snapshot.hasError) {
+          return Scaffold(
+            appBar: AppBar(title: const Text('Announcement')),
+            body: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'This notice could not be loaded. It may be unpublished or outside your area.',
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton(
+                      onPressed: () => setState(() {
+                        _load = controller.fetchAnnouncement(
+                          widget.announcementId,
+                        );
+                      }),
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+        return _AnnouncementContent(
+          announcement: snapshot.data,
+          onRefresh: controller.usesPersistentData
+              ? () => setState(() {
+                  _load = controller.fetchAnnouncement(widget.announcementId);
+                })
+              : null,
+        );
+      },
+    );
+  }
+}
+
+class _AnnouncementContent extends StatelessWidget {
+  const _AnnouncementContent({required this.announcement, this.onRefresh});
+  final Announcement? announcement;
+  final VoidCallback? onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    final announcement = this.announcement;
     if (announcement == null || !announcement.isPublished) {
       return const NotFoundScreen(
         message: 'This announcement is no longer available.',
@@ -108,6 +185,12 @@ class AnnouncementDetailScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Announcement'),
         actions: <Widget>[
+          if (onRefresh != null)
+            IconButton(
+              onPressed: onRefresh,
+              icon: const Icon(Icons.refresh),
+              tooltip: 'Refresh notice',
+            ),
           IconButton(
             onPressed: () => _share(context, announcement),
             icon: const Icon(Icons.ios_share_outlined),

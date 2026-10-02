@@ -34,6 +34,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     super.didChangeDependencies();
     if (_hydrated) return;
     final controller = AppScope.of(context);
+    if (controller.authorities.isEmpty) return;
     final user = controller.currentUser;
     _nameController.text = user?.fullName ?? '';
     _phoneController.text = user?.phone ?? '';
@@ -109,6 +110,38 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final controller = AppScope.of(context);
+    if (controller.authorities.isEmpty) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Set up your local profile')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const EmptyState(
+                  icon: Icons.location_city_outlined,
+                  title: 'No local authorities available',
+                  message:
+                      'Your service area is not available yet. Please contact your local authority or try again later.',
+                ),
+                const SizedBox(height: 16),
+                FilledButton(
+                  onPressed: () =>
+                      saveCivicAction(context, controller.refreshData),
+                  child: const Text('Try again'),
+                ),
+                TextButton(
+                  onPressed: () => saveCivicAction(context, controller.signOut),
+                  child: const Text('Sign out'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     final label = switch (_step) {
       0 => 'Continue to location',
       1 => 'Continue to map',
@@ -190,6 +223,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
+                isExpanded: true,
                 value: _language,
                 decoration: const InputDecoration(
                   labelText: 'Preferred language',
@@ -239,6 +273,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ),
               const SizedBox(height: 26),
               DropdownButtonFormField<String>(
+                isExpanded: true,
                 value: _authorityId,
                 decoration: const InputDecoration(
                   labelText: 'Local authority',
@@ -258,6 +293,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
+                isExpanded: true,
                 value: _ward,
                 decoration: const InputDecoration(
                   labelText: 'Ward',
@@ -457,12 +493,15 @@ class _OnboardingProgress extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: List<Widget>.generate(
             labels.length,
-            (index) => Text(
-              labels[index],
-              style: TextStyle(
-                color: index <= step ? AppColors.deepGreen : AppColors.muted,
-                fontSize: 12,
-                fontWeight: index == step ? FontWeight.w800 : FontWeight.w600,
+            (index) => Expanded(
+              child: Text(
+                labels[index],
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: index <= step ? AppColors.deepGreen : AppColors.muted,
+                  fontSize: 12,
+                  fontWeight: index == step ? FontWeight.w800 : FontWeight.w600,
+                ),
               ),
             ),
           ),

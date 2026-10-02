@@ -1,4 +1,5 @@
 import '../../widgets/save_civic_action.dart';
+import '../community/announcement_controls.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -110,7 +111,8 @@ class CitizenHomeScreen extends StatelessWidget {
               return GridView(
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: count,
-                  mainAxisExtent: 150,
+                  mainAxisExtent:
+                      100 + MediaQuery.textScalerOf(context).scale(20) * 4,
                   crossAxisSpacing: 12,
                   mainAxisSpacing: 12,
                 ),
@@ -368,16 +370,22 @@ class _CivicFeedScreenState extends State<CivicFeedScreen> {
     final controller = AppScope.of(context);
     final categories = <String>[
       'All',
+      'Saved',
       ...controller.feedItems.map((item) => item.kind).toSet(),
     ];
     final items = _filter == 'All'
         ? controller.feedItems
-        : controller.feedItems.where((item) => item.kind == _filter).toList();
+        : controller.feedItems
+              .where(
+                (item) => _filter == 'Saved'
+                    ? item.savedUserIds.contains(controller.currentUser?.id)
+                    : item.kind == _filter,
+              )
+              .toList();
     return Scaffold(
       appBar: AppBar(title: const Text('Community updates')),
       body: ResponsivePage(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: ListView(
           children: <Widget>[
             const PageHeader(
               icon: Icons.forum_outlined,
@@ -385,6 +393,7 @@ class _CivicFeedScreenState extends State<CivicFeedScreen> {
               subtitle:
                   'Official notices, project updates and community opportunities.',
             ),
+            const AnnouncementControls(),
             const SizedBox(height: 16),
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
@@ -404,13 +413,19 @@ class _CivicFeedScreenState extends State<CivicFeedScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            Expanded(
-              child: ListView.separated(
-                itemCount: items.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 12),
-                itemBuilder: (context, index) => _FeedCard(item: items[index]),
+            if (items.isEmpty)
+              const EmptyState(
+                icon: Icons.forum_outlined,
+                title: 'No updates here yet',
+                message: 'Refresh or load more notices to check for updates.',
+              )
+            else
+              ...items.map(
+                (item) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _FeedCard(item: item),
+                ),
               ),
-            ),
           ],
         ),
       ),
@@ -493,14 +508,24 @@ class _FeedCard extends StatelessWidget {
                 color: AppColors.muted,
               ),
               const SizedBox(width: 4),
-              Text(
-                item.locationLabel,
-                style: const TextStyle(color: AppColors.muted, fontSize: 12),
+              Expanded(
+                child: Text(
+                  item.locationLabel,
+                  style: const TextStyle(color: AppColors.muted, fontSize: 12),
+                ),
               ),
             ],
           ),
+          if (controller.usesPersistentData)
+            TextButton(
+              onPressed: () =>
+                  Navigator.pushNamed(context, '/announcements/${item.id}'),
+              child: const Text('Read announcement'),
+            ),
           const Divider(height: 28),
-          Row(
+          Wrap(
+            spacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: <Widget>[
               _FeedAction(
                 icon: reacted ? Icons.favorite : Icons.favorite_border,
@@ -519,13 +544,11 @@ class _FeedCard extends StatelessWidget {
                   if (!context.mounted) return;
                 },
               ),
-              const SizedBox(width: 14),
               _FeedAction(
                 icon: Icons.chat_bubble_outline,
                 label: '${item.commentCount}',
                 onTap: () => _showCommentDialog(context, item),
               ),
-              const Spacer(),
               IconButton(
                 onPressed: () async {
                   if (!controller.canParticipate) {
@@ -565,16 +588,45 @@ class _FeedCard extends StatelessWidget {
 
   Future<void> _showCommentDialog(BuildContext context, FeedItem item) async {
     final textController = TextEditingController();
+    final requestId = 'c-${DateTime.now().microsecondsSinceEpoch}';
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Add a civic comment'),
-        content: TextField(
-          controller: textController,
-          maxLines: 3,
-          decoration: const InputDecoration(
-            hintText: 'Keep your comment respectful and relevant.',
-          ),
+        title: const Text('Civic comments'),
+        scrollable: true,
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (item.comments.isNotEmpty) ...[
+              const Text('Recent comments'),
+              ...item.comments.map(
+                (comment) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        comment.author,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      Text(comment.message),
+                    ],
+                  ),
+                ),
+              ),
+              const Divider(),
+            ],
+            TextField(
+              controller: textController,
+              maxLength: 2000,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Your comment',
+                hintText: 'Keep your comment respectful and relevant.',
+              ),
+            ),
+          ],
         ),
         actions: <Widget>[
           TextButton(
@@ -592,7 +644,11 @@ class _FeedCard extends StatelessWidget {
               if (textController.text.trim().isNotEmpty) {
                 if (!await saveCivicAction(
                   context,
-                  () => controller.addFeedComment(item.id),
+                  () => controller.addFeedComment(
+                    item.id,
+                    textController.text,
+                    requestId: requestId,
+                  ),
                 )) {
                   return;
                 }
