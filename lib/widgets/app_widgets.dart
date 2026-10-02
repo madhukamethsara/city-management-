@@ -73,12 +73,15 @@ class AppLogo extends StatelessWidget {
           ),
           if (!compact) ...<Widget>[
             const SizedBox(width: 10),
-            Text(
-              AppCopy.text('appName'),
-              style: TextStyle(
-                color: foreground,
-                fontSize: 19,
-                fontWeight: FontWeight.w800,
+            Flexible(
+              child: Text(
+                AppCopy.text('appName'),
+                style: TextStyle(
+                  color: foreground,
+                  fontSize: 19,
+                  fontWeight: FontWeight.w800,
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
@@ -138,45 +141,65 @@ class PageHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        if (icon != null) ...<Widget>[
-          Container(
-            width: 45,
-            height: 45,
-            decoration: BoxDecoration(
-              color: AppColors.mint,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Icon(icon, color: AppColors.deepGreen),
-          ),
-          const SizedBox(width: 12),
-        ],
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(
-                title,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final stackAction =
+            constraints.maxWidth < 600 ||
+            MediaQuery.textScalerOf(context).scale(16) > 22;
+        final heading = Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (icon != null) ...[
+              Container(
+                width: 45,
+                height: 45,
+                decoration: BoxDecoration(
+                  color: AppColors.mint,
+                  borderRadius: BorderRadius.circular(14),
                 ),
+                child: Icon(icon, color: AppColors.deepGreen),
               ),
-              if (subtitle != null) ...<Widget>[
-                const SizedBox(height: 4),
-                Text(
-                  subtitle!,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(color: AppColors.muted),
-                ),
-              ],
+              const SizedBox(width: 12),
             ],
-          ),
-        ),
-        if (action != null) ...<Widget>[const SizedBox(width: 12), action!],
-      ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle!,
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodyMedium?.copyWith(color: AppColors.muted),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            if (!stackAction && action != null) ...[
+              const SizedBox(width: 12),
+              action!,
+            ],
+          ],
+        );
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            heading,
+            if (stackAction && action != null) ...[
+              const SizedBox(height: 12),
+              action!,
+            ],
+          ],
+        );
+      },
     );
   }
 }
@@ -453,11 +476,13 @@ class ProjectCard extends StatelessWidget {
                         ),
                       ),
                       if (project.isBudgetPublic)
-                        Text(
-                          formatLkr(project.budget),
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 12,
+                        Flexible(
+                          child: Text(
+                            formatLkr(project.budget),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 12,
+                            ),
                           ),
                         ),
                     ],
@@ -521,9 +546,10 @@ class ReportCard extends StatelessWidget {
                   ],
                 ),
               ),
-              ReportStatusBadge(status: report.status),
             ],
           ),
+          const SizedBox(height: 10),
+          ReportStatusBadge(status: report.status),
           const SizedBox(height: 12),
           Text(
             report.description,

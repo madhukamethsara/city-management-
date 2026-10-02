@@ -1,3 +1,4 @@
+import '../data/civic_failure.dart';
 import 'package:flutter/material.dart';
 
 final _pendingSaves = <Object>{};
@@ -12,11 +13,15 @@ Future<bool> saveCivicAction(
   try {
     await action();
     return true;
-  } catch (_) {
+  } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Could not save your changes. Please try again.'),
+        SnackBar(
+          content: Text(
+            error is CivicFailure
+                ? error.message
+                : 'Could not save your changes. Please try again.',
+          ),
         ),
       );
     }

@@ -1,3 +1,5 @@
+import '../../data/civic_failure.dart';
+import '../../widgets/save_civic_action.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -45,6 +47,8 @@ class _ReportWizardScreenState extends State<ReportWizardScreen> {
   int _step = 0;
   bool _submitting = false;
   bool _initialised = false;
+  final String _requestId = 'r-${DateTime.now().microsecondsSinceEpoch}';
+  final Map<XFile, String> _uploadedPhotos = {};
 
   @override
   void didChangeDependencies() {
@@ -76,12 +80,31 @@ class _ReportWizardScreenState extends State<ReportWizardScreen> {
   }
 
   Future<void> _pickPhoto() async {
-    final files = await _picker.pickMultiImage(imageQuality: 80);
-    if (!mounted || files.isEmpty) return;
-    setState(() => _photos.addAll(files));
+    try {
+      final files = await _picker.pickMultiImage(imageQuality: 80);
+      if (!mounted || files.isEmpty) return;
+      if (_photos.length + files.length > 5) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Choose up to five photos.')),
+        );
+        return;
+      }
+      setState(() => _photos.addAll(files));
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not open your photos. Check photo access and try again.',
+            ),
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _continue() async {
+    if (_submitting) return;
     if (_step == 0 && !_detailsKey.currentState!.validate()) return;
     if (_step == 1 &&
         (!_locationKey.currentState!.validate() || _location == null)) {
@@ -100,6 +123,12 @@ class _ReportWizardScreenState extends State<ReportWizardScreen> {
     }
     setState(() => _submitting = true);
     try {
+      for (final photo in _photos) {
+        _uploadedPhotos[photo] ??= await controller.uploadReportPhoto(
+          photo.name,
+          await photo.readAsBytes(),
+        );
+      }
       final report = await controller.submitReport(
         ReportDraft(
           category: _category,
@@ -108,7 +137,10 @@ class _ReportWizardScreenState extends State<ReportWizardScreen> {
           locationLabel: _locationLabel.text.trim(),
           location: _location!,
           urgency: _urgency,
-          attachmentNames: _photos.map((file) => file.name).toList(),
+          attachmentNames: _photos
+              .map((file) => _uploadedPhotos[file]!)
+              .toList(),
+          requestId: _requestId,
         ),
       );
       if (!mounted) return;
@@ -151,11 +183,19 @@ class _ReportWizardScreenState extends State<ReportWizardScreen> {
           ],
         ),
       );
-    } on StateError catch (error) {
+    } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.message)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              error is CivicFailure
+                  ? error.message
+                  : error is StateError
+                  ? error.message
+                  : 'Could not submit your report. Your details are still here; please try again.',
+            ),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -246,6 +286,7 @@ class _ReportWizardScreenState extends State<ReportWizardScreen> {
               ),
               const SizedBox(height: 20),
               DropdownButtonFormField<String>(
+                isExpanded: true,
                 value: _category,
                 decoration: const InputDecoration(
                   labelText: 'Issue category',
@@ -255,7 +296,7 @@ class _ReportWizardScreenState extends State<ReportWizardScreen> {
                     .map(
                       (category) => DropdownMenuItem(
                         value: category,
-                        child: Text(category),
+                        child: Text(category, overflow: TextOverflow.ellipsis),
                       ),
                     )
                     .toList(),
@@ -419,7 +460,7 @@ class _ReportWizardScreenState extends State<ReportWizardScreen> {
               icon: Icons.add_photo_alternate_outlined,
               title: 'Add evidence',
               subtitle:
-                  'Photos help officers understand the issue. You can continue without a photo.',
+                  'Add up to five JPG, PNG, or WebP photos, each smaller than 5 MB. Photos are optional.',
             ),
             const SizedBox(height: 16),
             OutlinedButton.icon(
@@ -625,12 +666,15 @@ class _WizardProgress extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: List<Widget>.generate(
             labels.length,
-            (index) => Text(
-              labels[index],
-              style: TextStyle(
-                fontSize: 12,
-                color: index <= step ? AppColors.deepGreen : AppColors.muted,
-                fontWeight: index == step ? FontWeight.w900 : FontWeight.w600,
+            (index) => Expanded(
+              child: Text(
+                labels[index],
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: index <= step ? AppColors.deepGreen : AppColors.muted,
+                  fontWeight: index == step ? FontWeight.w900 : FontWeight.w600,
+                ),
               ),
             ),
           ),
@@ -676,7 +720,8 @@ class _ReviewLine extends StatelessWidget {
 }
 
 class MyReportsScreen extends StatefulWidget {
-  const MyReportsScreen({super.key});
+  const MyReportsScreen({super.key, this.embedded = false});
+  final bool embedded;
 
   @override
   State<MyReportsScreen> createState() => _MyReportsScreenState();
@@ -691,77 +736,90 @@ class _MyReportsScreenState extends State<MyReportsScreen> {
     final reports = controller.myReports
         .where((report) => _filter == null || report.status == _filter)
         .toList();
-    return Scaffold(
-      appBar: AppBar(title: const Text('My reports')),
-      body: ResponsivePage(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            PageHeader(
-              icon: Icons.assignment_outlined,
-              title: controller.isOfficer
-                  ? 'Complaint management'
-                  : 'Your submitted reports',
-              subtitle: controller.isOfficer
-                  ? 'View reported issues assigned across the local authority.'
-                  : 'Track each case, see updates and confirm whether work is complete.',
-              action: controller.canParticipate && !controller.isOfficer
-                  ? FilledButton.icon(
-                      onPressed: () => Navigator.pushNamed(context, '/report'),
-                      icon: const Icon(Icons.add),
-                      label: const Text('New report'),
-                    )
-                  : null,
-            ),
-            const SizedBox(height: 14),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: <Widget>[
-                  ChoiceChip(
-                    label: const Text('All'),
-                    selected: _filter == null,
-                    onSelected: (_) => setState(() => _filter = null),
+    final content = ResponsivePage(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          PageHeader(
+            icon: Icons.assignment_outlined,
+            title: controller.isOfficer
+                ? 'Complaint management'
+                : 'Your submitted reports',
+            subtitle: controller.isOfficer
+                ? 'View reported issues assigned across the local authority.'
+                : 'Track each case, see updates and confirm whether work is complete.',
+            action: controller.canParticipate && !controller.isOfficer
+                ? FilledButton.icon(
+                    onPressed: () => Navigator.pushNamed(context, '/report'),
+                    icon: const Icon(Icons.add),
+                    label: const Text('New report'),
+                  )
+                : null,
+          ),
+          const SizedBox(height: 14),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: <Widget>[
+                ChoiceChip(
+                  label: const Text('All'),
+                  selected: _filter == null,
+                  onSelected: (_) => setState(() => _filter = null),
+                ),
+                const SizedBox(width: 8),
+                ...ReportStatus.values.map(
+                  (status) => Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(status.label),
+                      selected: _filter == status,
+                      onSelected: (_) => setState(() => _filter = status),
+                    ),
                   ),
-                  const SizedBox(width: 8),
-                  ...ReportStatus.values.map(
-                    (status) => Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: ChoiceChip(
-                        label: Text(status.label),
-                        selected: _filter == status,
-                        onSelected: (_) => setState(() => _filter = status),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          Expanded(
+            child: reports.isEmpty
+                ? const EmptyState(
+                    icon: Icons.assignment_late_outlined,
+                    title: 'No reports in this view',
+                    message:
+                        'Try a different status filter or submit a new issue report.',
+                  )
+                : ListView.separated(
+                    itemCount: reports.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 10),
+                    itemBuilder: (context, index) => ReportCard(
+                      report: reports[index],
+                      onTap: () => Navigator.pushNamed(
+                        context,
+                        '/reports/${reports[index].id}',
                       ),
                     ),
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 14),
-            Expanded(
-              child: reports.isEmpty
-                  ? const EmptyState(
-                      icon: Icons.assignment_late_outlined,
-                      title: 'No reports in this view',
-                      message:
-                          'Try a different status filter or submit a new issue report.',
-                    )
-                  : ListView.separated(
-                      itemCount: reports.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 10),
-                      itemBuilder: (context, index) => ReportCard(
-                        report: reports[index],
-                        onTap: () => Navigator.pushNamed(
-                          context,
-                          '/reports/${reports[index].id}',
-                        ),
-                      ),
-                    ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
+    return widget.embedded
+        ? content
+        : Scaffold(
+            appBar: AppBar(
+              title: const Text('My reports'),
+              actions: [
+                IconButton(
+                  tooltip: 'Refresh reports',
+                  icon: const Icon(Icons.refresh),
+                  onPressed: () =>
+                      saveCivicAction(context, controller.refreshData),
+                ),
+              ],
+            ),
+            body: content,
+          );
   }
 }
 
@@ -776,7 +834,7 @@ class ReportDetailScreen extends StatefulWidget {
 
 class _ReportDetailScreenState extends State<ReportDetailScreen> {
   final _comment = TextEditingController();
-  final List<CivicComment> _comments = <CivicComment>[];
+  bool _sendingComment = false;
 
   @override
   void dispose() {
@@ -794,7 +852,16 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     final userId = controller.currentUser?.id;
     final following = userId != null && report.followerIds.contains(userId);
     return Scaffold(
-      appBar: AppBar(title: Text(report.caseNumber)),
+      appBar: AppBar(
+        title: Text(report.caseNumber),
+        actions: [
+          IconButton(
+            tooltip: 'Refresh report',
+            icon: const Icon(Icons.refresh),
+            onPressed: () => saveCivicAction(context, controller.refreshData),
+          ),
+        ],
+      ),
       body: ResponsivePage(
         child: ListView(
           children: <Widget>[
@@ -934,7 +1001,8 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                     .map((file) => _AttachmentChip(name: file))
                     .toList(),
               ),
-            if (report.status == ReportStatus.resolved) ...<Widget>[
+            if (report.status == ReportStatus.resolved &&
+                report.ownerUserId == userId) ...<Widget>[
               const SizedBox(height: 22),
               _ResolutionConfirmation(reportId: report.id),
             ],
@@ -943,29 +1011,23 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
             const SizedBox(height: 10),
             _CommentComposer(
               controller: _comment,
-              onSend: () {
+              onSend: () async {
                 if (!controller.canParticipate) {
                   showSignInPrompt(context);
                   return;
                 }
-                if (_comment.text.trim().isEmpty) return;
-                setState(() {
-                  _comments.add(
-                    CivicComment(
-                      id: 'rc-${DateTime.now().microsecondsSinceEpoch}',
-                      author: controller.currentUser!.isVerified
-                          ? 'Verified Resident · ${controller.currentUser!.ward}'
-                          : 'Resident',
-                      message: _comment.text.trim(),
-                      createdAt: DateTime.now(),
-                      isVerified: controller.currentUser!.isVerified,
-                    ),
-                  );
-                  _comment.clear();
-                });
+                if (_sendingComment || _comment.text.trim().isEmpty) return;
+                setState(() => _sendingComment = true);
+                final saved = await saveCivicAction(
+                  context,
+                  () => controller.addReportComment(report.id, _comment.text),
+                );
+                if (!mounted) return;
+                if (saved) _comment.clear();
+                setState(() => _sendingComment = false);
               },
             ),
-            if (_comments.isEmpty)
+            if (report.comments.isEmpty)
               const Padding(
                 padding: EdgeInsets.only(top: 10),
                 child: Text(
@@ -973,7 +1035,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                   style: TextStyle(color: AppColors.muted),
                 ),
               ),
-            ..._comments.map(
+            ...report.comments.map(
               (comment) => Padding(
                 padding: const EdgeInsets.only(top: 10),
                 child: _ReportComment(comment: comment),
@@ -1085,26 +1147,63 @@ class _AttachmentChip extends StatelessWidget {
   final String name;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(12),
-    decoration: BoxDecoration(
-      color: AppColors.mint,
-      borderRadius: BorderRadius.circular(14),
-    ),
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        const Icon(Icons.image_outlined, color: AppColors.deepGreen),
-        const SizedBox(width: 7),
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 160),
-          child: Text(
-            name,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontWeight: FontWeight.w700),
+  Widget build(BuildContext context) => InkWell(
+    onTap: () async {
+      final controller = AppScope.of(context);
+      await saveCivicAction(context, () async {
+        final url = await controller.reportPhotoUrl(name);
+        if (!context.mounted) return;
+        if (url == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Photo previews are available in connected mode.'),
+            ),
+          );
+          return;
+        }
+        await showDialog<void>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Report evidence'),
+            content: InteractiveViewer(
+              child: Image.network(
+                url,
+                errorBuilder: (_, error, stack) => const Text(
+                  'Could not load this photo. Close and try again.',
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close'),
+              ),
+            ],
           ),
-        ),
-      ],
+        );
+      });
+    },
+    child: Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.mint,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          const Icon(Icons.image_outlined, color: AppColors.deepGreen),
+          const SizedBox(width: 7),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 160),
+            child: Text(
+              name.split('/').last,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
     ),
   );
 }

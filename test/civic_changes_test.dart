@@ -34,13 +34,15 @@ void main() {
       final project = app.projects.first;
       final followed = project.followerIds.contains(userId);
       await app.toggleProjectFollow(project.id);
+      await app.signIn(email: 'officer@smart-sabha.lk', password: 'demo12345');
       await app.saveProject(
         app.projectById(project.id)!.copyWith(progress: 77),
       );
+      await app.signIn(email: 'citizen@smart-sabha.lk', password: 'demo12345');
       final feed = app.feedItems.first;
       await app.toggleFeedReaction(feed.id);
       await app.toggleFeedSave(feed.id);
-      await app.addFeedComment(feed.id);
+      await app.addFeedComment(feed.id, 'Please share the planned dates.');
       final proposal = await app.submitProposal(
         const ProposalDraft(
           title: 'A new library',
@@ -80,6 +82,10 @@ void main() {
         (item) => item.id == feed.id,
       );
       expect(savedFeed.commentCount, feed.commentCount + 1);
+      expect(
+        savedFeed.comments.single.message,
+        'Please share the planned dates.',
+      );
       expect(
         savedFeed.reactedUserIds.contains(userId),
         !feed.reactedUserIds.contains(userId),

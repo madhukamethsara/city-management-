@@ -1,3 +1,6 @@
+import '../../data/civic_failure.dart';
+import '../projects/connected_project_list.dart';
+import '../community/announcement_controls.dart';
 import '../../widgets/save_civic_action.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -62,6 +65,80 @@ class _AdminShellState extends State<AdminShell> {
   Widget build(BuildContext context) {
     final desktop = MediaQuery.sizeOf(context).width >= 1000;
     final controller = AppScope.of(context);
+    if (controller.usesPersistentData) {
+      return Scaffold(
+        appBar: AppBar(
+          title: Text(switch (_section) {
+            AdminSection.projects => 'Officer projects',
+            AdminSection.announcements => 'Officer announcements',
+            _ => 'Officer cases',
+          }),
+          actions: [
+            IconButton(
+              tooltip: 'Refresh data',
+              icon: const Icon(Icons.refresh),
+              onPressed: () => saveCivicAction(context, controller.refreshData),
+            ),
+            IconButton(
+              tooltip: 'Citizen app',
+              icon: const Icon(Icons.public_outlined),
+              onPressed: () => Navigator.pushNamedAndRemoveUntil(
+                context,
+                '/citizen',
+                (route) => false,
+              ),
+            ),
+            IconButton(
+              tooltip: 'Sign out',
+              icon: const Icon(Icons.logout),
+              onPressed: () async {
+                if (!await saveCivicAction(context, controller.signOut)) return;
+                if (context.mounted) {
+                  Navigator.pushNamedAndRemoveUntil(
+                    context,
+                    '/',
+                    (route) => false,
+                  );
+                }
+              },
+            ),
+          ],
+        ),
+        body: switch (_section) {
+          AdminSection.projects => const AdminProjectsPanel(),
+          AdminSection.announcements => const AdminAnnouncementsPanel(),
+          _ => const AdminReportsPanel(),
+        },
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: switch (_section) {
+            AdminSection.projects => 1,
+            AdminSection.announcements => 2,
+            _ => 0,
+          },
+          onDestinationSelected: (index) => setState(
+            () => _section = [
+              AdminSection.reports,
+              AdminSection.projects,
+              AdminSection.announcements,
+            ][index],
+          ),
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.assignment_outlined),
+              label: 'Complaints',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.account_tree_outlined),
+              label: 'Projects',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.campaign_outlined),
+              label: 'Notices',
+            ),
+          ],
+        ),
+      );
+    }
     final panel = _panel();
     final main = Scaffold(
       appBar: AppBar(
@@ -69,18 +146,25 @@ class _AdminShellState extends State<AdminShell> {
           children: <Widget>[
             const AppLogo(compact: true),
             const SizedBox(width: 10),
-            Text('Officer · ${_section.label}'),
+            Expanded(
+              child: Text('Officer cases', overflow: TextOverflow.ellipsis),
+            ),
           ],
         ),
         actions: <Widget>[
-          TextButton.icon(
+          IconButton(
+            tooltip: 'Refresh cases',
+            icon: const Icon(Icons.refresh),
+            onPressed: () => saveCivicAction(context, controller.refreshData),
+          ),
+          IconButton(
+            tooltip: 'Citizen app',
             onPressed: () => Navigator.pushNamedAndRemoveUntil(
               context,
               '/citizen',
               (route) => false,
             ),
             icon: const Icon(Icons.public_outlined),
-            label: const Text('Citizen app'),
           ),
           IconButton(
             onPressed: () async {
@@ -635,10 +719,65 @@ class _AdminReportsPanelState extends State<AdminReportsPanel> {
                 message: 'Adjust the search or filters to see cases.',
               ),
             )
+          else if (MediaQuery.sizeOf(context).width < 760 ||
+              MediaQuery.textScalerOf(context).scale(16) > 24)
+            ...reports.map(
+              (report) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: CivicCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        report.caseNumber,
+                        style: const TextStyle(color: AppColors.muted),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        report.title,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 8,
+                        children: [
+                          ReportStatusBadge(status: report.status),
+                          Text(report.priority),
+                          Text(report.department),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          TextButton.icon(
+                            onPressed: () => Navigator.pushNamed(
+                              context,
+                              '/reports/${report.id}',
+                            ),
+                            icon: const Icon(Icons.visibility_outlined),
+                            label: const Text('View case'),
+                          ),
+                          FilledButton.icon(
+                            onPressed: () => _openEditor(report),
+                            icon: const Icon(Icons.edit_outlined),
+                            label: const Text('Update case'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            )
           else
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: DataTable(
+                dataRowMinHeight: 64,
+                dataRowMaxHeight:
+                    64 + MediaQuery.textScalerOf(context).scale(20),
                 columns: const <DataColumn>[
                   DataColumn(label: Text('Case')),
                   DataColumn(label: Text('Status')),
@@ -681,10 +820,22 @@ class _AdminReportsPanelState extends State<AdminReportsPanel> {
                           DataCell(Text(report.priority)),
                           DataCell(Text(relativeTime(report.lastUpdated))),
                           DataCell(
-                            IconButton(
-                              onPressed: () => _openEditor(report),
-                              icon: const Icon(Icons.edit_outlined),
-                              tooltip: 'Open case',
+                            Row(
+                              children: [
+                                IconButton(
+                                  tooltip: 'View case',
+                                  icon: const Icon(Icons.visibility_outlined),
+                                  onPressed: () => Navigator.pushNamed(
+                                    context,
+                                    '/reports/${report.id}',
+                                  ),
+                                ),
+                                IconButton(
+                                  onPressed: () => _openEditor(report),
+                                  icon: const Icon(Icons.edit_outlined),
+                                  tooltip: 'Update case',
+                                ),
+                              ],
                             ),
                           ),
                         ],
@@ -725,6 +876,7 @@ class _ReportEditorState extends State<_ReportEditor> {
   String? _priority;
   String? _officer;
   XFile? _completionPhoto;
+  String? _uploadedEvidence;
   bool _saving = false;
 
   @override
@@ -748,7 +900,12 @@ class _ReportEditorState extends State<_ReportEditor> {
       source: ImageSource.gallery,
       imageQuality: 80,
     );
-    if (mounted && image != null) setState(() => _completionPhoto = image);
+    if (mounted && image != null) {
+      setState(() {
+        _completionPhoto = image;
+        _uploadedEvidence = null;
+      });
+    }
   }
 
   @override
@@ -794,20 +951,29 @@ class _ReportEditorState extends State<_ReportEditor> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
+              isExpanded: true,
               value: _department,
               decoration: const InputDecoration(labelText: 'Department'),
-              items: controller.departments
-                  .map(
-                    (department) => DropdownMenuItem(
-                      value: department.name,
-                      child: Text(department.name),
-                    ),
-                  )
-                  .toList(),
+              items:
+                  {
+                        ...controller.departments.map((d) => d.name),
+                        if (_department != null) _department!,
+                      }
+                      .map(
+                        (department) => DropdownMenuItem(
+                          value: department,
+                          child: Text(
+                            department,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      )
+                      .toList(),
               onChanged: (value) => setState(() => _department = value),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
+              isExpanded: true,
               value: _priority,
               decoration: const InputDecoration(labelText: 'Priority'),
               items: const <DropdownMenuItem<String>>[
@@ -819,14 +985,18 @@ class _ReportEditorState extends State<_ReportEditor> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String?>(
+              isExpanded: true,
               value: _officer,
               decoration: const InputDecoration(labelText: 'Assigned officer'),
               items: <DropdownMenuItem<String?>>[
                 const DropdownMenuItem(value: null, child: Text('Unassigned')),
-                ...officers.map(
+                ...{
+                  ...officers.map((o) => o.fullName),
+                  if (_officer != null) _officer!,
+                }.map(
                   (officer) => DropdownMenuItem(
-                    value: officer.fullName,
-                    child: Text(officer.fullName),
+                    value: officer,
+                    child: Text(officer, overflow: TextOverflow.ellipsis),
                   ),
                 ),
               ],
@@ -867,8 +1037,16 @@ class _ReportEditorState extends State<_ReportEditor> {
                   : () async {
                       setState(() => _saving = true);
                       try {
+                        if (_completionPhoto != null) {
+                          _uploadedEvidence ??= await controller
+                              .uploadReportPhoto(
+                                _completionPhoto!.name,
+                                await _completionPhoto!.readAsBytes(),
+                              );
+                        }
                         await controller.updateReportStatus(
                           reportId: widget.report.id,
+                          expectedRevision: widget.report.revision,
                           status: _status!,
                           department: _department!,
                           priority: _priority!,
@@ -879,16 +1057,18 @@ class _ReportEditorState extends State<_ReportEditor> {
                           internalNote: _internalNote.text,
                           attachmentNames: _completionPhoto == null
                               ? null
-                              : <String>[_completionPhoto!.name],
+                              : <String>[_uploadedEvidence!],
                         );
                         if (!context.mounted) return;
                         Navigator.pop(context);
-                      } catch (_) {
+                      } catch (error) {
                         if (!context.mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
+                          SnackBar(
                             content: Text(
-                              'Could not save the case update. Please try again.',
+                              error is CivicFailure
+                                  ? error.message
+                                  : 'Could not save the case update. Please try again.',
                             ),
                           ),
                         );
@@ -911,6 +1091,13 @@ class AdminProjectsPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final controller = AppScope.of(context);
+    if (controller.usesPersistentData) {
+      return ConnectedProjectList(
+        title: 'Project administration',
+        onCreate: () => _openEditor(context),
+        onOpen: (project) => _openEditor(context, project: project),
+      );
+    }
     return ResponsivePage(
       child: ListView(
         children: <Widget>[
@@ -1004,45 +1191,94 @@ class _ProjectEditorState extends State<_ProjectEditor> {
   final _description = TextEditingController();
   final _category = TextEditingController();
   final _location = TextEditingController();
+  final _latitude = TextEditingController();
+  final _longitude = TextEditingController();
   final _budget = TextEditingController();
+  final _spent = TextEditingController();
   final _contractor = TextEditingController();
   final _update = TextEditingController();
   final _milestone = TextEditingController();
   final _document = TextEditingController();
+  final _documentUrl = TextEditingController();
   final _picker = ImagePicker();
-  final List<XFile> _images = <XFile>[];
-  late ProjectStatus _status;
-  late String _department;
-  late int _progress;
-  late bool _budgetPublic;
+  final List<XFile> _images = [];
+  final _eventTime = DateTime.now();
+  final List<ProjectMilestone> _milestones = [];
+  final List<PublicDocument> _documents = [];
+  Project? _base;
+  ProjectStatus _status = ProjectStatus.proposed;
+  String? _department;
+  int _progress = 0;
+  bool _budgetPublic = true;
+  bool _updatePublic = true;
+  bool _saving = false;
+  late DateTime _startDate;
+  late DateTime _completionDate;
+  late DateTime _milestoneDate;
 
   @override
-  void initState() {
-    super.initState();
-    final project = widget.project;
-    _title.text = project?.title ?? '';
-    _description.text = project?.description ?? '';
-    _category.text = project?.category ?? 'Public infrastructure';
-    _location.text = project?.locationLabel ?? '';
-    _budget.text = '${project?.budget ?? 0}';
-    _contractor.text = project?.contractor ?? '';
-    _status = project?.status ?? ProjectStatus.proposed;
-    _department = project?.department ?? 'Engineering';
-    _progress = project?.progress ?? 0;
-    _budgetPublic = project?.isBudgetPublic ?? true;
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_base != null) return;
+    final controller = AppScope.of(context);
+    _base =
+        widget.project ??
+        controller.buildProject(
+          ProjectDraft(
+            title: '',
+            description: '',
+            category: 'Public infrastructure',
+            locationLabel: '',
+            status: ProjectStatus.proposed,
+            progress: 0,
+            budget: 0,
+            department: controller.departments.isEmpty
+                ? ''
+                : controller.departments.first.name,
+          ),
+        );
+    final p = _base!;
+    _title.text = p.title;
+    _description.text = p.description;
+    _category.text = p.category;
+    _location.text = p.locationLabel;
+    _latitude.text = p.location.latitude.toString();
+    _longitude.text = p.location.longitude.toString();
+    _budget.text = '${p.budget}';
+    _spent.text = '${p.spent}';
+    _contractor.text = p.contractor ?? '';
+    _status = p.status;
+    _department = controller.departments.any((d) => d.name == p.department)
+        ? p.department
+        : null;
+    _progress = p.progress;
+    _budgetPublic = p.isBudgetPublic;
+    _startDate = p.startDate;
+    _completionDate = p.expectedCompletion;
+    _milestoneDate = p.expectedCompletion;
+    _milestones.addAll(p.milestones);
+    _documents.addAll(p.documents);
   }
 
   @override
   void dispose() {
-    _title.dispose();
-    _description.dispose();
-    _category.dispose();
-    _location.dispose();
-    _budget.dispose();
-    _contractor.dispose();
-    _update.dispose();
-    _milestone.dispose();
-    _document.dispose();
+    for (final c in [
+      _title,
+      _description,
+      _category,
+      _location,
+      _latitude,
+      _longitude,
+      _budget,
+      _spent,
+      _contractor,
+      _update,
+      _milestone,
+      _document,
+      _documentUrl,
+    ]) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -1051,102 +1287,113 @@ class _ProjectEditorState extends State<_ProjectEditor> {
     if (mounted && images.isNotEmpty) setState(() => _images.addAll(images));
   }
 
+  Future<void> _pickDate(
+    DateTime current,
+    ValueChanged<DateTime> update,
+  ) async {
+    final selected = await showDatePicker(
+      context: context,
+      initialDate: current,
+      firstDate: DateTime(1900),
+      lastDate: DateTime(2200),
+    );
+    if (mounted && selected != null) setState(() => update(selected));
+  }
+
+  String? _amount(String? value) {
+    final amount = int.tryParse((value ?? '').replaceAll(',', ''));
+    return amount == null || amount < 0 || amount > 999999999999999
+        ? 'Enter a non-negative amount in LKR.'
+        : null;
+  }
+
+  String? _coordinate(String? value, double max) {
+    final n = double.tryParse(value ?? '');
+    return n == null || !n.isFinite || n.abs() > max
+        ? 'Enter a coordinate between -$max and $max.'
+        : null;
+  }
+
   Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
-    final controller = AppScope.of(context);
-    final now = DateTime.now();
-    final budget = int.tryParse(_budget.text.replaceAll(',', '')) ?? 0;
-    final document = _document.text.trim().isEmpty
-        ? const <PublicDocument>[]
-        : <PublicDocument>[
-            PublicDocument(
-              name: _document.text.trim(),
-              kind: 'PDF',
-              sizeLabel: 'Awaiting upload',
-            ),
-          ];
-    final milestone = _milestone.text.trim().isEmpty
-        ? const <ProjectMilestone>[]
-        : <ProjectMilestone>[
-            ProjectMilestone(
-              title: _milestone.text.trim(),
-              description: 'Milestone added by the authority.',
-              percentage: _progress,
-              expectedDate: now.add(const Duration(days: 30)),
-              completedDate: null,
-              isComplete: false,
-            ),
-          ];
-    final update = _update.text.trim().isEmpty
-        ? const <ProjectUpdate>[]
-        : <ProjectUpdate>[
-            ProjectUpdate(
-              title: 'Project update',
-              message: _update.text.trim(),
-              date: now,
-              isPublic: true,
-            ),
-          ];
-    if (widget.project == null) {
-      final created = controller.buildProject(
-        ProjectDraft(
-          title: _title.text.trim(),
-          description: _description.text.trim(),
-          category: _category.text.trim(),
-          locationLabel: _location.text.trim(),
-          status: _status,
-          progress: _progress,
-          budget: budget,
-          department: _department,
+    if (_saving || !_formKey.currentState!.validate()) return;
+    if (_completionDate.isBefore(_startDate)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Completion must be on or after the start date.'),
         ),
       );
-      if (!await saveCivicAction(
-        context,
-        () => controller.saveProject(
-          created.copyWith(
-            contractor: _contractor.text.trim(),
-            isBudgetPublic: _budgetPublic,
-            documents: document,
-            milestones: milestone,
-            updates: <ProjectUpdate>[...created.updates, ...update],
-            imageLabels: _images.map((image) => image.name).toList(),
-          ),
-        ),
-      )) {
-        return;
-      }
-      if (!mounted) return;
-    } else {
-      final project = widget.project!;
-      if (!await saveCivicAction(
-        context,
-        () => controller.saveProject(
-          project.copyWith(
-            title: _title.text.trim(),
-            description: _description.text.trim(),
-            category: _category.text.trim(),
-            locationLabel: _location.text.trim(),
-            status: _status,
-            progress: _progress,
-            department: _department,
-            budget: budget,
-            isBudgetPublic: _budgetPublic,
-            contractor: _contractor.text.trim(),
-            documents: <PublicDocument>[...project.documents, ...document],
-            milestones: <ProjectMilestone>[...project.milestones, ...milestone],
-            updates: <ProjectUpdate>[...project.updates, ...update],
-            imageLabels: <String>[
-              ...project.imageLabels,
-              ..._images.map((image) => image.name),
-            ],
-          ),
-        ),
-      )) {
-        return;
-      }
-      if (!mounted) return;
+      return;
     }
-    Navigator.pop(context);
+    final controller = AppScope.of(context);
+    final documents = [..._documents];
+    if (_document.text.trim().isNotEmpty) {
+      documents.add(
+        PublicDocument(
+          name: _document.text.trim(),
+          kind: 'Link',
+          sizeLabel: 'Public document',
+          url: _documentUrl.text.trim().isEmpty
+              ? null
+              : _documentUrl.text.trim(),
+        ),
+      );
+    }
+    final milestones = [..._milestones];
+    if (_milestone.text.trim().isNotEmpty) {
+      milestones.add(
+        ProjectMilestone(
+          title: _milestone.text.trim(),
+          description: 'Milestone added by the authority.',
+          percentage: _progress,
+          expectedDate: _milestoneDate,
+          completedDate: null,
+          isComplete: false,
+        ),
+      );
+    }
+    final project = _base!.copyWith(
+      title: _title.text.trim(),
+      description: _description.text.trim(),
+      category: _category.text.trim(),
+      locationLabel: _location.text.trim(),
+      location: GeoPoint(
+        double.parse(_latitude.text),
+        double.parse(_longitude.text),
+      ),
+      status: _status,
+      progress: _progress,
+      department: _department!,
+      startDate: _startDate,
+      expectedCompletion: _completionDate,
+      budget: int.parse(_budget.text.replaceAll(',', '')),
+      spent: int.parse(_spent.text.replaceAll(',', '')),
+      isBudgetPublic: _budgetPublic,
+      contractor: _contractor.text.trim(),
+      documents: documents,
+      milestones: milestones,
+      updates: [
+        ..._base!.updates,
+        if (_update.text.trim().isNotEmpty)
+          ProjectUpdate(
+            title: 'Project update',
+            message: _update.text.trim(),
+            date: _eventTime,
+            isPublic: _updatePublic,
+          ),
+      ],
+      imageLabels: [
+        ..._base!.imageLabels,
+        ..._images.map((image) => image.name),
+      ],
+    );
+    setState(() => _saving = true);
+    final saved = await saveCivicAction(
+      context,
+      () => controller.saveProject(project),
+    );
+    if (!mounted) return;
+    setState(() => _saving = false);
+    if (saved) Navigator.pop(context);
   }
 
   @override
@@ -1162,162 +1409,313 @@ class _ProjectEditorState extends State<_ProjectEditor> {
       child: SingleChildScrollView(
         child: Form(
           key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(
-                widget.project == null ? 'Create project' : 'Manage project',
-                style: const TextStyle(
-                  fontSize: 21,
-                  fontWeight: FontWeight.w900,
+          child: AbsorbPointer(
+            absorbing: _saving,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  widget.project == null ? 'Create project' : 'Manage project',
+                  style: const TextStyle(
+                    fontSize: 21,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 18),
-              TextFormField(
-                controller: _title,
-                maxLength: 100,
-                decoration: const InputDecoration(labelText: 'Project title'),
-                validator: (value) => value == null || value.trim().length < 8
-                    ? 'Enter a project title.'
-                    : null,
-              ),
-              const SizedBox(height: 10),
-              TextFormField(
-                controller: _description,
-                minLines: 3,
-                maxLines: 5,
-                decoration: const InputDecoration(
-                  labelText: 'Public description',
+                const SizedBox(height: 18),
+                TextFormField(
+                  controller: _title,
+                  maxLength: 100,
+                  decoration: const InputDecoration(labelText: 'Project title'),
+                  validator: (v) => (v ?? '').trim().length < 8
+                      ? 'Enter a project title.'
+                      : null,
                 ),
-                validator: (value) => value == null || value.trim().length < 20
-                    ? 'Add a public description.'
-                    : null,
-              ),
-              const SizedBox(height: 10),
-              TextFormField(
-                controller: _category,
-                decoration: const InputDecoration(labelText: 'Category'),
-              ),
-              const SizedBox(height: 10),
-              TextFormField(
-                controller: _location,
-                decoration: const InputDecoration(labelText: 'Location label'),
-                validator: (value) => value == null || value.trim().isEmpty
-                    ? 'Add a project location.'
-                    : null,
-              ),
-              const SizedBox(height: 10),
-              DropdownButtonFormField<ProjectStatus>(
-                value: _status,
-                decoration: const InputDecoration(labelText: 'Project status'),
-                items: ProjectStatus.values
-                    .map(
-                      (status) => DropdownMenuItem(
-                        value: status,
-                        child: Text(status.label),
+                TextFormField(
+                  controller: _description,
+                  maxLength: 10000,
+                  minLines: 3,
+                  maxLines: 5,
+                  decoration: const InputDecoration(
+                    labelText: 'Public description',
+                  ),
+                  validator: (v) => (v ?? '').trim().length < 20
+                      ? 'Add a public description.'
+                      : null,
+                ),
+                TextFormField(
+                  controller: _category,
+                  maxLength: 120,
+                  decoration: const InputDecoration(labelText: 'Category'),
+                  validator: (v) =>
+                      (v ?? '').trim().isEmpty ? 'Enter a category.' : null,
+                ),
+                TextFormField(
+                  controller: _location,
+                  maxLength: 200,
+                  decoration: const InputDecoration(
+                    labelText: 'Location label',
+                  ),
+                  validator: (v) => (v ?? '').trim().isEmpty
+                      ? 'Add a project location.'
+                      : null,
+                ),
+                TextFormField(
+                  controller: _latitude,
+                  decoration: const InputDecoration(
+                    labelText: 'Project latitude',
+                  ),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                    signed: true,
+                  ),
+                  validator: (v) => _coordinate(v, 90),
+                ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: _longitude,
+                  decoration: const InputDecoration(
+                    labelText: 'Project longitude',
+                  ),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                    signed: true,
+                  ),
+                  validator: (v) => _coordinate(v, 180),
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<ProjectStatus>(
+                  value: _status,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Project status',
+                  ),
+                  items: ProjectStatus.values
+                      .map(
+                        (s) => DropdownMenuItem(value: s, child: Text(s.label)),
+                      )
+                      .toList(),
+                  onChanged: (s) => setState(() => _status = s ?? _status),
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  value: _department,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Responsible department',
+                  ),
+                  items: controller.departments
+                      .map(
+                        (d) => DropdownMenuItem(
+                          value: d.name,
+                          child: Text(d.name),
+                        ),
+                      )
+                      .toList(),
+                  validator: (v) => v == null ? 'Choose a department.' : null,
+                  onChanged: (v) => setState(() => _department = v),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Progress: $_progress%',
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                Slider(
+                  value: _progress.toDouble(),
+                  min: 0,
+                  max: 100,
+                  divisions: 100,
+                  label: '$_progress%',
+                  onChanged: (v) => setState(() => _progress = v.round()),
+                ),
+                Wrap(
+                  spacing: 12,
+                  children: [
+                    TextButton(
+                      onPressed: () =>
+                          _pickDate(_startDate, (d) => _startDate = d),
+                      child: Text(
+                        'Start: ${formatDate(_startDate, includeYear: true)}',
                       ),
-                    )
-                    .toList(),
-                onChanged: (value) =>
-                    setState(() => _status = value ?? _status),
-              ),
-              const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                value: _department,
-                decoration: const InputDecoration(
-                  labelText: 'Responsible department',
-                ),
-                items: controller.departments
-                    .map(
-                      (department) => DropdownMenuItem(
-                        value: department.name,
-                        child: Text(department.name),
+                    ),
+                    TextButton(
+                      onPressed: () => _pickDate(
+                        _completionDate,
+                        (d) => _completionDate = d,
                       ),
-                    )
-                    .toList(),
-                onChanged: (value) =>
-                    setState(() => _department = value ?? _department),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'Progress: $_progress%',
-                style: const TextStyle(fontWeight: FontWeight.w800),
-              ),
-              Slider(
-                value: _progress.toDouble(),
-                min: 0,
-                max: 100,
-                divisions: 20,
-                label: '$_progress%',
-                onChanged: (value) => setState(() => _progress = value.round()),
-              ),
-              TextFormField(
-                controller: _budget,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Allocated budget (LKR)',
+                      child: Text(
+                        'Completion: ${formatDate(_completionDate, includeYear: true)}',
+                      ),
+                    ),
+                  ],
                 ),
-                validator: (value) =>
-                    int.tryParse((value ?? '').replaceAll(',', '')) == null
-                    ? 'Enter an amount in LKR.'
-                    : null,
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Display budget publicly'),
-                value: _budgetPublic,
-                onChanged: (value) => setState(() => _budgetPublic = value),
-              ),
-              TextField(
-                controller: _contractor,
-                decoration: const InputDecoration(
-                  labelText: 'Contractor (optional)',
+                TextFormField(
+                  controller: _budget,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Allocated budget (LKR)',
+                  ),
+                  validator: _amount,
                 ),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _update,
-                minLines: 2,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                  labelText: 'Public progress update (optional)',
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: _spent,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Amount spent (LKR)',
+                  ),
+                  validator: _amount,
                 ),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _milestone,
-                decoration: const InputDecoration(
-                  labelText: 'Add milestone (optional)',
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Display budget publicly'),
+                  value: _budgetPublic,
+                  onChanged: (v) => setState(() => _budgetPublic = v),
                 ),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _document,
-                decoration: const InputDecoration(
-                  labelText: 'Public document name (optional)',
+                TextFormField(
+                  controller: _contractor,
+                  maxLength: 200,
+                  decoration: const InputDecoration(
+                    labelText: 'Contractor (optional)',
+                  ),
                 ),
-              ),
-              const SizedBox(height: 10),
-              OutlinedButton.icon(
-                onPressed: _addImages,
-                icon: const Icon(Icons.add_photo_alternate_outlined),
-                label: Text(
-                  _images.isEmpty
-                      ? 'Add project images'
-                      : '${_images.length} image(s) selected',
+                TextFormField(
+                  controller: _update,
+                  maxLength: 4000,
+                  minLines: 2,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Progress update (optional)',
+                  ),
                 ),
-              ),
-              const SizedBox(height: 18),
-              FilledButton(
-                onPressed: _save,
-                child: Text(
-                  widget.project == null
-                      ? 'Create project'
-                      : 'Save project changes',
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Publish this update'),
+                  subtitle: const Text(
+                    'Private updates are visible to authority officers.',
+                  ),
+                  value: _updatePublic,
+                  onChanged: (v) => setState(() => _updatePublic = v),
                 ),
-              ),
-            ],
+                if (_base!.updates.any((u) => !u.isPublic)) ...[
+                  const Text(
+                    'Internal updates',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  ..._base!.updates
+                      .where((u) => !u.isPublic)
+                      .map(
+                        (u) => ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(u.title),
+                          subtitle: Text(u.message),
+                        ),
+                      ),
+                ],
+                ..._milestones.asMap().entries.map((entry) {
+                  final m = entry.value;
+                  return CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(m.title),
+                    value: m.isComplete,
+                    onChanged: (complete) => setState(
+                      () => _milestones[entry.key] = ProjectMilestone(
+                        title: m.title,
+                        description: m.description,
+                        percentage: m.percentage,
+                        expectedDate: m.expectedDate,
+                        completedDate: complete == true ? _eventTime : null,
+                        isComplete: complete == true,
+                      ),
+                    ),
+                  );
+                }),
+                TextFormField(
+                  controller: _milestone,
+                  maxLength: 200,
+                  decoration: const InputDecoration(
+                    labelText: 'Add milestone (optional)',
+                  ),
+                ),
+                TextButton(
+                  onPressed: () =>
+                      _pickDate(_milestoneDate, (d) => _milestoneDate = d),
+                  child: Text(
+                    'Milestone due: ${formatDate(_milestoneDate, includeYear: true)}',
+                  ),
+                ),
+                ..._documents.asMap().entries.map(
+                  (entry) => ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(entry.value.name),
+                    subtitle: Text(entry.value.url ?? 'Demo document'),
+                    trailing: IconButton(
+                      tooltip: 'Remove document',
+                      icon: const Icon(Icons.close),
+                      onPressed: () =>
+                          setState(() => _documents.removeAt(entry.key)),
+                    ),
+                  ),
+                ),
+                TextFormField(
+                  controller: _document,
+                  maxLength: 200,
+                  decoration: const InputDecoration(
+                    labelText: 'Public document name (optional)',
+                  ),
+                  validator: (v) =>
+                      _documentUrl.text.trim().isNotEmpty &&
+                          (v ?? '').trim().isEmpty
+                      ? 'Name the document.'
+                      : null,
+                ),
+                TextFormField(
+                  controller: _documentUrl,
+                  maxLength: 2048,
+                  keyboardType: TextInputType.url,
+                  decoration: const InputDecoration(
+                    labelText: 'Public document HTTPS link',
+                    helperText: 'Use a publicly accessible document link.',
+                  ),
+                  validator: (v) {
+                    if ((v ?? '').trim().isEmpty &&
+                        (!controller.usesPersistentData ||
+                            _document.text.trim().isEmpty)) {
+                      return null;
+                    }
+                    final uri = Uri.tryParse((v ?? '').trim());
+                    return uri == null ||
+                            uri.scheme != 'https' ||
+                            uri.host.isEmpty ||
+                            uri.userInfo.isNotEmpty ||
+                            RegExp(r'\s').hasMatch(v ?? '')
+                        ? 'Enter a public HTTPS document link.'
+                        : null;
+                  },
+                ),
+                if (!controller.usesPersistentData)
+                  OutlinedButton.icon(
+                    onPressed: _addImages,
+                    icon: const Icon(Icons.add_photo_alternate_outlined),
+                    label: Text(
+                      _images.isEmpty
+                          ? 'Add project images'
+                          : '${_images.length} image(s) selected',
+                    ),
+                  ),
+                const SizedBox(height: 18),
+                FilledButton(
+                  onPressed: _saving ? null : _save,
+                  child: Text(
+                    _saving
+                        ? 'Saving...'
+                        : widget.project == null
+                        ? 'Create project'
+                        : 'Save project changes',
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1338,14 +1736,16 @@ class AdminAnnouncementsPanel extends StatelessWidget {
             icon: Icons.campaign_outlined,
             title: 'Announcement administration',
             subtitle:
-                'Draft, schedule, publish and archive authority notices with geographic targeting.',
+                'Draft, publish and unpublish authority notices for selected wards and GN divisions.',
             action: FilledButton.icon(
+              style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
               onPressed: () => _openComposer(context),
               icon: const Icon(Icons.add),
               label: const Text('New announcement'),
             ),
           ),
           const SizedBox(height: 18),
+          const AnnouncementControls(),
           ...controller.managedAnnouncements.map(
             (announcement) => Padding(
               padding: const EdgeInsets.only(bottom: 10),
@@ -1391,7 +1791,7 @@ class AdminAnnouncementsPanel extends StatelessWidget {
                           Text(
                             announcement.isPublished
                                 ? 'Published'
-                                : 'Draft / scheduled',
+                                : 'Unpublished',
                             style: TextStyle(
                               color: announcement.isPublished
                                   ? AppColors.green
@@ -1438,7 +1838,7 @@ class AdminAnnouncementsPanel extends StatelessWidget {
                         if (announcement.isPublished)
                           const PopupMenuItem(
                             value: 'archive',
-                            child: Text('Archive'),
+                            child: Text('Unpublish'),
                           ),
                       ],
                     ),
@@ -1478,6 +1878,10 @@ class _AnnouncementComposerState extends State<_AnnouncementComposer> {
   final _title = TextEditingController();
   final _body = TextEditingController();
   final _target = TextEditingController();
+  final _ward = TextEditingController();
+  final _division = TextEditingController();
+  final _requestId = 'a-${DateTime.now().microsecondsSinceEpoch}';
+  bool _saving = false;
   late AnnouncementType _type;
   late String _department;
   bool _publishNow = false;
@@ -1489,6 +1893,8 @@ class _AnnouncementComposerState extends State<_AnnouncementComposer> {
     _title.text = announcement?.title ?? '';
     _body.text = announcement?.body ?? '';
     _target.text = announcement?.targetLabel ?? 'All wards';
+    _ward.text = announcement?.targetWard ?? '';
+    _division.text = announcement?.targetDivision ?? '';
     _type = announcement?.type ?? AnnouncementType.normal;
     _department = announcement?.department ?? 'Administration';
     _publishNow = announcement?.isPublished ?? false;
@@ -1499,48 +1905,61 @@ class _AnnouncementComposerState extends State<_AnnouncementComposer> {
     _title.dispose();
     _body.dispose();
     _target.dispose();
+    _ward.dispose();
+    _division.dispose();
     super.dispose();
   }
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_saving) return;
+    setState(() => _saving = true);
     final controller = AppScope.of(context);
-    if (widget.existing == null) {
-      if (!await saveCivicAction(
-        context,
-        () => controller.createAnnouncement(
-          AnnouncementDraft(
-            title: _title.text.trim(),
-            body: _body.text.trim(),
-            type: _type,
-            department: _department,
-            targetLabel: _target.text.trim(),
+    try {
+      if (widget.existing == null) {
+        if (!await saveCivicAction(
+          context,
+          () => controller.createAnnouncement(
+            AnnouncementDraft(
+              requestId: _requestId,
+              targetWard: _ward.text.trim(),
+              targetDivision: _division.text.trim(),
+              title: _title.text.trim(),
+              body: _body.text.trim(),
+              type: _type,
+              department: _department,
+              targetLabel: _target.text.trim(),
+            ),
+            publishNow: _publishNow,
           ),
-          publishNow: _publishNow,
-        ),
-      )) {
-        return;
-      }
-      if (!mounted) return;
-    } else {
-      if (!await saveCivicAction(
-        context,
-        () => controller.saveAnnouncement(
-          widget.existing!.copyWith(
-            title: _title.text.trim(),
-            body: _body.text.trim(),
-            type: _type,
-            department: _department,
-            targetLabel: _target.text.trim(),
-            isPublished: _publishNow,
+        )) {
+          return;
+        }
+        if (!mounted) return;
+      } else {
+        if (!await saveCivicAction(
+          context,
+          () => controller.saveAnnouncement(
+            widget.existing!.copyWith(
+              targetWard: _ward.text.trim(),
+              targetDivision: _division.text.trim(),
+              title: _title.text.trim(),
+              body: _body.text.trim(),
+              type: _type,
+              department: _department,
+              targetLabel: _target.text.trim(),
+              isPublished: _publishNow,
+            ),
           ),
-        ),
-      )) {
-        return;
+        )) {
+          return;
+        }
+        if (!mounted) return;
       }
-      if (!mounted) return;
+      Navigator.pop(context);
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
-    Navigator.pop(context);
   }
 
   @override
@@ -1583,6 +2002,7 @@ class _AnnouncementComposerState extends State<_AnnouncementComposer> {
               const SizedBox(height: 10),
               TextFormField(
                 controller: _body,
+                maxLength: 10000,
                 minLines: 4,
                 maxLines: 7,
                 decoration: const InputDecoration(labelText: 'Public message'),
@@ -1592,6 +2012,7 @@ class _AnnouncementComposerState extends State<_AnnouncementComposer> {
               ),
               const SizedBox(height: 10),
               DropdownButtonFormField<AnnouncementType>(
+                isExpanded: true,
                 value: _type,
                 decoration: const InputDecoration(
                   labelText: 'Announcement type',
@@ -1609,6 +2030,7 @@ class _AnnouncementComposerState extends State<_AnnouncementComposer> {
               const SizedBox(height: 10),
               DropdownButtonFormField<String>(
                 value: _department,
+                isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Department'),
                 items: <DropdownMenuItem<String>>[
                   const DropdownMenuItem(
@@ -1626,27 +2048,46 @@ class _AnnouncementComposerState extends State<_AnnouncementComposer> {
                     setState(() => _department = value ?? _department),
               ),
               const SizedBox(height: 10),
-              TextFormField(
-                controller: _target,
-                decoration: const InputDecoration(
-                  labelText: 'Geographic target',
+              if (controller.usesPersistentData) ...[
+                TextFormField(
+                  controller: _ward,
+                  maxLength: 120,
+                  decoration: const InputDecoration(
+                    labelText: 'Target ward (optional)',
+                    helperText:
+                        'Use the exact ward name. Blank includes all wards.',
+                  ),
                 ),
-                validator: (value) => value == null || value.trim().isEmpty
-                    ? 'Specify who should see this.'
-                    : null,
-              ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: _division,
+                  maxLength: 120,
+                  decoration: const InputDecoration(
+                    labelText: 'Target GN division (optional)',
+                    helperText:
+                        'Use the exact division name. Both filled targets must match.',
+                  ),
+                ),
+              ] else
+                TextFormField(
+                  controller: _target,
+                  decoration: const InputDecoration(
+                    labelText: 'Geographic target',
+                  ),
+                  validator: (value) => value == null || value.trim().isEmpty
+                      ? 'Specify who should see this.'
+                      : null,
+                ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 value: _publishNow,
                 onChanged: (value) => setState(() => _publishNow = value),
                 title: Text(
-                  _publishNow
-                      ? 'Publish immediately'
-                      : 'Keep as draft / schedule later',
+                  _publishNow ? 'Publish immediately' : 'Keep unpublished',
                 ),
               ),
               FilledButton(
-                onPressed: _save,
+                onPressed: _saving ? null : _save,
                 child: Text(
                   widget.existing == null
                       ? (_publishNow ? 'Publish announcement' : 'Save draft')

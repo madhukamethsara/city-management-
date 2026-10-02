@@ -41,3 +41,23 @@ jobs:
 
       - name: Run tests
         run: flutter test --no-pub
+
+  report-backend:
+    name: Civic database permissions
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install ephemeral PostgreSQL runtime
+        run: npm install --prefix .dart_tool/sql-validation --no-audit --no-fund --ignore-scripts @electric-sql/pglite@0.5.8
+      - name: Test report transactions and permissions
+        run: node tool/test_report_backend.mjs
+      - name: Test project permissions, subscriptions and pagination
+        run: node tool/test_project_backend.mjs
+      - name: Test announcement targeting, publication and feed participation
+        run: node tool/test_announcement_backend.mjs

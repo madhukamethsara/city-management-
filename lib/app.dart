@@ -1,3 +1,4 @@
+import 'widgets/save_civic_action.dart';
 import 'package:flutter/material.dart';
 
 import 'core/theme/app_theme.dart';
@@ -52,6 +53,12 @@ class SmartSabhaApp extends StatelessWidget {
                           icon: const Icon(Icons.refresh),
                           label: const Text('Try again'),
                         ),
+                        if (controller.hasSession)
+                          TextButton(
+                            onPressed: () =>
+                                saveCivicAction(context, controller.signOut),
+                            child: const Text('Sign out'),
+                          ),
                       ],
                     ),
                   ),
@@ -89,6 +96,45 @@ Route<dynamic> _routeFor(RouteSettings settings, AppController controller) {
     return _page(settings, const OnboardingScreen());
   }
   if (route == '/onboarding') return _page(settings, const OnboardingScreen());
+
+  if (controller.usesPersistentData &&
+      !{
+        '/',
+        '/citizen',
+        '/report',
+        '/my-reports',
+        '/notifications',
+        '/profile',
+        '/admin',
+        '/admin/reports',
+        '/projects',
+        '/admin/projects',
+        '/admin/projects/new',
+        '/feed',
+        '/announcements',
+        '/admin/announcements',
+      }.contains(route) &&
+      !route.startsWith('/reports/') &&
+      !route.startsWith('/projects/') &&
+      !route.startsWith('/announcements/')) {
+    return _page(
+      settings,
+      Scaffold(
+        appBar: AppBar(title: const Text('Service availability')),
+        body: const Center(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: EmptyState(
+              icon: Icons.construction_outlined,
+              title: 'This service is coming next',
+              message:
+                  'The connected release currently supports reports, projects, announcements, the civic feed, notifications, and your profile.',
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   if (route.startsWith('/admin')) {
     if (!controller.isOfficer) {

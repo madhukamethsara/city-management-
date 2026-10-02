@@ -1,3 +1,4 @@
+import 'save_civic_action.dart';
 import 'package:flutter/material.dart';
 
 import '../core/theme/app_theme.dart';
@@ -41,9 +42,28 @@ class _CitizenShellState extends State<CitizenShell> {
   @override
   Widget build(BuildContext context) {
     final controller = AppScope.of(context);
-    final desktop = MediaQuery.sizeOf(context).width >= 900;
+    final size = MediaQuery.sizeOf(context);
+    final desktop =
+        size.width >= 900 &&
+        size.height >= 640 &&
+        MediaQuery.textScalerOf(context).scale(16) <= 24;
+    final visibleIndexes = [0, 1, 2, 3, 4, 5];
+    final items = visibleIndexes
+        .map(
+          (index) => controller.usesPersistentData && index == 0
+              ? const _NavItem(
+                  'My reports',
+                  Icons.assignment_outlined,
+                  Icons.assignment,
+                )
+              : _items[index],
+        )
+        .toList();
+    if (!visibleIndexes.contains(_index)) _index = 0;
     final pages = <Widget>[
-      const CitizenHomeScreen(),
+      controller.usesPersistentData
+          ? const MyReportsScreen(embedded: true)
+          : const CitizenHomeScreen(),
       const CivicFeedScreen(),
       const ReportWizardScreen(embedded: true),
       const ProjectExplorerScreen(embedded: true),
@@ -51,21 +71,29 @@ class _CitizenShellState extends State<CitizenShell> {
       const ProfileScreen(),
     ];
     final appBar = AppBar(
-      title: const AppLogo(),
+      title: AppLogo(compact: size.width < 380),
       actions: <Widget>[
-        IconButton(
-          onPressed: () => Navigator.pushNamed(context, '/search'),
-          icon: const Icon(Icons.search),
-          tooltip: 'Search Smart Sabha',
-        ),
-        IconButton(
-          onPressed: () => Navigator.pushNamed(context, '/map'),
-          icon: const Icon(Icons.map_outlined),
-          tooltip: 'Map',
-        ),
+        if (controller.usesPersistentData)
+          IconButton(
+            tooltip: 'Refresh data',
+            icon: const Icon(Icons.refresh),
+            onPressed: () => saveCivicAction(context, controller.refreshData),
+          ),
+        if (!controller.usesPersistentData)
+          IconButton(
+            onPressed: () => Navigator.pushNamed(context, '/search'),
+            icon: const Icon(Icons.search),
+            tooltip: 'Search Smart Sabha',
+          ),
+        if (!controller.usesPersistentData)
+          IconButton(
+            onPressed: () => Navigator.pushNamed(context, '/map'),
+            icon: const Icon(Icons.map_outlined),
+            tooltip: 'Map',
+          ),
         PopupMenuButton<String>(
           tooltip: 'More services',
-          onSelected: (value) {
+          onSelected: (value) async {
             switch (value) {
               case 'reports':
                 Navigator.pushNamed(context, '/my-reports');
@@ -78,7 +106,8 @@ class _CitizenShellState extends State<CitizenShell> {
               case 'admin':
                 Navigator.pushNamed(context, '/admin');
               case 'logout':
-                controller.signOut();
+                if (!await saveCivicAction(context, controller.signOut)) return;
+                if (!context.mounted) return;
                 Navigator.pushNamedAndRemoveUntil(
                   context,
                   '/',
@@ -101,20 +130,22 @@ class _CitizenShellState extends State<CitizenShell> {
                 title: Text('Announcements'),
               ),
             ),
-            const PopupMenuItem(
-              value: 'proposals',
-              child: ListTile(
-                leading: Icon(Icons.lightbulb_outline),
-                title: Text('Community proposals'),
+            if (!controller.usesPersistentData)
+              const PopupMenuItem(
+                value: 'proposals',
+                child: ListTile(
+                  leading: Icon(Icons.lightbulb_outline),
+                  title: Text('Community proposals'),
+                ),
               ),
-            ),
-            const PopupMenuItem(
-              value: 'consultations',
-              child: ListTile(
-                leading: Icon(Icons.forum_outlined),
-                title: Text('Consultations'),
+            if (!controller.usesPersistentData)
+              const PopupMenuItem(
+                value: 'consultations',
+                child: ListTile(
+                  leading: Icon(Icons.forum_outlined),
+                  title: Text('Consultations'),
+                ),
               ),
-            ),
             if (controller.isOfficer)
               const PopupMenuItem(
                 value: 'admin',
@@ -144,10 +175,12 @@ class _CitizenShellState extends State<CitizenShell> {
       bottomNavigationBar: desktop
           ? null
           : NavigationBar(
-              selectedIndex: _index,
-              labelBehavior: NavigationDestinationLabelBehavior.alwaysHide,
-              onDestinationSelected: (value) => setState(() => _index = value),
-              destinations: _items
+              selectedIndex: visibleIndexes.indexOf(_index),
+              labelBehavior:
+                  NavigationDestinationLabelBehavior.onlyShowSelected,
+              onDestinationSelected: (value) =>
+                  setState(() => _index = visibleIndexes[value]),
+              destinations: items
                   .map(
                     (item) => NavigationDestination(
                       icon:
@@ -177,15 +210,16 @@ class _CitizenShellState extends State<CitizenShell> {
         children: <Widget>[
           SafeArea(
             child: NavigationRail(
-              selectedIndex: _index,
+              selectedIndex: visibleIndexes.indexOf(_index),
               labelType: NavigationRailLabelType.all,
               minWidth: 86,
               leading: const Padding(
                 padding: EdgeInsets.only(top: 12, bottom: 20),
                 child: AppLogo(compact: true),
               ),
-              onDestinationSelected: (value) => setState(() => _index = value),
-              destinations: _items
+              onDestinationSelected: (value) =>
+                  setState(() => _index = visibleIndexes[value]),
+              destinations: items
                   .map(
                     (item) => NavigationRailDestination(
                       icon:

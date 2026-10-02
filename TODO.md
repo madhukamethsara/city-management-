@@ -1,7 +1,8 @@
 # Smart Sabha implementation checklist
 
-Existing citizen and officer screens use seeded, in-memory data. Screen presence
-is not production completion. Work through these milestones in order.
+Demo mode uses seeded, in-memory data. Reports, profiles, projects and announcements have local
+Supabase implementations; staging/device verification is still pending. Screen
+presence is not production completion. See ROADMAP.md for current delivery status.
 
 ## 1. Foundation
 - [x] Inspect the app and document implementation gaps.
@@ -13,21 +14,24 @@ is not production completion. Work through these milestones in order.
 ## 2. Authentication and permissions
 - [x] Implement configurable Supabase login, registration, recovery, and session restoration.
 - [ ] Configure a Supabase project and verify live email delivery, callbacks, and session restoration (see AUTH_SETUP.md).
-- [ ] Enforce active-account and role permissions in backend and controller.
-- [ ] Persist profiles and onboarding details.
+- [x] Enforce active-account and role permissions for connected reports/projects.
+- [x] Persist profiles and onboarding details.
 - [ ] Distinguish officer, department-admin, and platform-admin permissions.
 
 ## 3. Persistent core request workflow
-- [ ] Define database tables with local-authority ownership.
-- [ ] Implement backend repository and authority-scoped access policies.
-- [ ] Persist report submission, assignment, updates, and resident confirmation.
-- [ ] Upload actual attachment bytes with appropriate access permissions.
-- [ ] Deliver notifications to their intended users and persist read state.
+- [x] Define database tables with local-authority ownership.
+- [x] Implement backend repository and authority-scoped access policies.
+- [x] Persist report submission, assignment, updates, and resident confirmation.
+- [x] Upload actual report attachment bytes with appropriate access permissions.
+- [x] Deliver notifications to their intended users and persist read state.
 - [ ] Verify citizen submission -> officer update -> resident notification across sessions.
 
 ## 4. Remaining civic features
-- [ ] Persist projects, milestones, budgets, documents, and following.
-- [ ] Persist announcements and geographic targeting.
+- [x] Persist projects, milestones, budgets, public document links, and following.
+- [ ] Verify projects against staging; add binary document/image uploads and persistent project feedback.
+- [x] Persist announcements, geographic targeting, publication and recipient notifications.
+- [x] Persist announcement-feed comments, reactions and saves.
+- [ ] Verify targeted announcement publication and feed participation against staging.
 - [ ] Persist proposals, comments, reactions, and consultation answers.
 - [ ] Replace placeholder analytics with calculated data.
 - [ ] Complete Sinhala, Tamil, and English translations and accessibility checks.

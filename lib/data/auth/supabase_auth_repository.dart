@@ -68,7 +68,7 @@ class SupabaseAuthRepository extends AuthRepository {
   }
 
   /// Privileged roles are not read from editable user metadata. Civic role
-  /// assignment will be connected to the backend permissions milestone.
+  /// assignment is loaded separately from the protected civic profile RPC.
   static AppUser? userFromAuth(User user) {
     if (user.appMetadata['is_active'] == false) return null;
     final name = user.userMetadata?['full_name'];
