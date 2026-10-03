@@ -55,6 +55,13 @@ app. Use `--dart-define=AUTH_MODE=demo` for the full in-memory demonstration.
 
 ## What is connected
 
+- Officer landing workspace with open, assigned-to-me, unassigned and urgent
+  open-case counts, recent case links and shortcuts to complaints, projects and
+  notices. Desktop uses a navigation rail; phones use bottom navigation.
+- Complaint assignment and urgency filters combine with search, status and
+  department filters. Cases sort by latest update. Assignment matching currently
+  uses the stored officer display name; unique officer IDs remain follow-up work.
+
 - Profile onboarding and restoration across app restarts.
 - Resident report creation, case tracking, comments, follow preference, and
   confirmation/reopening of resolved cases.
