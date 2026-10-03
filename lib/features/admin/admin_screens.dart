@@ -71,6 +71,7 @@ class _AdminShellState extends State<AdminShell> {
           title: Text(switch (_section) {
             AdminSection.projects => 'Officer projects',
             AdminSection.announcements => 'Officer announcements',
+            AdminSection.overview => 'Officer dashboard',
             _ => 'Officer cases',
           }),
           actions: [
@@ -104,39 +105,86 @@ class _AdminShellState extends State<AdminShell> {
             ),
           ],
         ),
-        body: switch (_section) {
-          AdminSection.projects => const AdminProjectsPanel(),
-          AdminSection.announcements => const AdminAnnouncementsPanel(),
-          _ => const AdminReportsPanel(),
-        },
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: switch (_section) {
-            AdminSection.projects => 1,
-            AdminSection.announcements => 2,
-            _ => 0,
-          },
-          onDestinationSelected: (index) => setState(
-            () => _section = [
-              AdminSection.reports,
-              AdminSection.projects,
-              AdminSection.announcements,
-            ][index],
-          ),
-          destinations: const [
-            NavigationDestination(
-              icon: Icon(Icons.assignment_outlined),
-              label: 'Complaints',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.account_tree_outlined),
-              label: 'Projects',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.campaign_outlined),
-              label: 'Notices',
+        body: Row(
+          children: [
+            if (desktop)
+              NavigationRail(
+                selectedIndex: [
+                  AdminSection.overview,
+                  AdminSection.reports,
+                  AdminSection.projects,
+                  AdminSection.announcements,
+                ].indexOf(_section),
+                labelType: NavigationRailLabelType.all,
+                onDestinationSelected: (index) => setState(
+                  () => _section = [
+                    AdminSection.overview,
+                    AdminSection.reports,
+                    AdminSection.projects,
+                    AdminSection.announcements,
+                  ][index],
+                ),
+                destinations: [
+                  for (final section in [
+                    AdminSection.overview,
+                    AdminSection.reports,
+                    AdminSection.projects,
+                    AdminSection.announcements,
+                  ])
+                    NavigationRailDestination(
+                      icon: Icon(section.icon),
+                      label: Text(section.label),
+                    ),
+                ],
+              ),
+            Expanded(
+              child: switch (_section) {
+                AdminSection.overview => OfficerOverviewPanel(
+                  onNavigate: (section) => setState(() => _section = section),
+                ),
+                AdminSection.projects => const AdminProjectsPanel(),
+                AdminSection.announcements => const AdminAnnouncementsPanel(),
+                _ => const AdminReportsPanel(),
+              },
             ),
           ],
         ),
+        bottomNavigationBar: desktop
+            ? null
+            : NavigationBar(
+                selectedIndex: switch (_section) {
+                  AdminSection.overview => 0,
+                  AdminSection.projects => 2,
+                  AdminSection.announcements => 3,
+                  _ => 1,
+                },
+                onDestinationSelected: (index) => setState(
+                  () => _section = [
+                    AdminSection.overview,
+                    AdminSection.reports,
+                    AdminSection.projects,
+                    AdminSection.announcements,
+                  ][index],
+                ),
+                destinations: const [
+                  NavigationDestination(
+                    icon: Icon(Icons.dashboard_outlined),
+                    label: 'Overview',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.assignment_outlined),
+                    label: 'Complaints',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.account_tree_outlined),
+                    label: 'Projects',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.campaign_outlined),
+                    label: 'Notices',
+                  ),
+                ],
+              ),
       );
     }
     final panel = _panel();
@@ -147,7 +195,7 @@ class _AdminShellState extends State<AdminShell> {
             const AppLogo(compact: true),
             const SizedBox(width: 10),
             Expanded(
-              child: Text('Officer cases', overflow: TextOverflow.ellipsis),
+              child: Text(_section.label, overflow: TextOverflow.ellipsis),
             ),
           ],
         ),
@@ -237,7 +285,7 @@ class _AdminShellState extends State<AdminShell> {
   }
 
   Widget _panel() => switch (_section) {
-    AdminSection.overview => AdminOverviewPanel(onNavigate: _select),
+    AdminSection.overview => OfficerOverviewPanel(onNavigate: _select),
     AdminSection.reports => const AdminReportsPanel(),
     AdminSection.projects => const AdminProjectsPanel(),
     AdminSection.announcements => const AdminAnnouncementsPanel(),
@@ -283,6 +331,143 @@ class _AdminDrawer extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class OfficerOverviewPanel extends StatelessWidget {
+  const OfficerOverviewPanel({super.key, required this.onNavigate});
+
+  final ValueChanged<AdminSection> onNavigate;
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = AppScope.of(context);
+    final open = controller.reports
+        .where(
+          (report) =>
+              report.status != ReportStatus.resolved &&
+              report.status != ReportStatus.rejected,
+        )
+        .toList();
+    final mine = open
+        .where(
+          (report) =>
+              report.assignedOfficer == controller.currentUser?.fullName,
+        )
+        .length;
+    final unassigned = open
+        .where(
+          (report) =>
+              report.assignedOfficer == null ||
+              report.assignedOfficer!.trim().isEmpty,
+        )
+        .length;
+    final urgent = open.where((report) => report.priority == 'Urgent').length;
+    final recent = [...controller.reports]
+      ..sort((a, b) => b.lastUpdated.compareTo(a.lastUpdated));
+    return ResponsivePage(
+      child: ListView(
+        children: [
+          PageHeader(
+            icon: Icons.dashboard_outlined,
+            title: 'Officer workspace',
+            subtitle:
+                '${controller.authorityName} • Welcome, ${controller.currentUser?.fullName ?? 'officer'}',
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Current case workload',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              for (final entry in [
+                ('Open cases', open.length, Icons.assignment_outlined),
+                ('Assigned to me', mine, Icons.person_outline),
+                ('Unassigned', unassigned, Icons.person_add_alt),
+                ('Urgent open cases', urgent, Icons.priority_high),
+              ])
+                SizedBox(
+                  width: 240,
+                  child: MetricTile(
+                    label: entry.$1,
+                    value: '${entry.$2}',
+                    icon: entry.$3,
+                    color: AppColors.deepGreen,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              FilledButton.icon(
+                onPressed: () => onNavigate(AdminSection.reports),
+                icon: const Icon(Icons.assignment_outlined),
+                label: const Text('Manage complaints'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => onNavigate(AdminSection.projects),
+                icon: const Icon(Icons.account_tree_outlined),
+                label: const Text('Manage projects'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => onNavigate(AdminSection.announcements),
+                icon: const Icon(Icons.campaign_outlined),
+                label: const Text('Manage notices'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          const SectionTitle(title: 'Recently updated cases'),
+          const SizedBox(height: 12),
+          if (recent.isEmpty)
+            const EmptyState(
+              icon: Icons.assignment_turned_in_outlined,
+              title: 'No cases yet',
+              message:
+                  'Resident reports will appear here. Use refresh to fetch new cases.',
+            ),
+          for (final report in recent.take(5))
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: CivicCard(
+                onTap: () =>
+                    Navigator.pushNamed(context, '/reports/${report.id}'),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      report.caseNumber,
+                      style: const TextStyle(color: AppColors.muted),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      report.title,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 8,
+                      children: [
+                        ReportStatusBadge(status: report.status),
+                        Text(report.department),
+                        Text(relativeTime(report.lastUpdated)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -608,6 +793,8 @@ class _AdminReportsPanelState extends State<AdminReportsPanel> {
   final _search = TextEditingController();
   ReportStatus? _status;
   String? _department;
+  String _assignment = 'All assignments';
+  bool _urgentOnly = false;
 
   @override
   void dispose() {
@@ -627,9 +814,18 @@ class _AdminReportsPanelState extends State<AdminReportsPanel> {
                       .toLowerCase()
                       .contains(query)) &&
               (_status == null || report.status == _status) &&
-              (_department == null || report.department == _department),
+              (_department == null || report.department == _department) &&
+              (!_urgentOnly || report.priority == 'Urgent') &&
+              (_assignment == 'All assignments' ||
+                  (_assignment == 'Assigned to me' &&
+                      report.assignedOfficer ==
+                          controller.currentUser?.fullName) ||
+                  (_assignment == 'Unassigned' &&
+                      (report.assignedOfficer == null ||
+                          report.assignedOfficer!.trim().isEmpty))),
         )
         .toList();
+    reports.sort((a, b) => b.lastUpdated.compareTo(a.lastUpdated));
     return ResponsivePage(
       child: ListView(
         children: <Widget>[
@@ -640,6 +836,38 @@ class _AdminReportsPanelState extends State<AdminReportsPanel> {
                 'Assign, prioritise and publish updates while preserving a clear case history.',
           ),
           const SizedBox(height: 14),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final label in [
+                'All assignments',
+                'Assigned to me',
+                'Unassigned',
+              ])
+                ChoiceChip(
+                  label: Text(label),
+                  selected: _assignment == label,
+                  onSelected: (_) => setState(() => _assignment = label),
+                ),
+              FilterChip(
+                label: const Text('Urgent only'),
+                selected: _urgentOnly,
+                onSelected: (value) => setState(() => _urgentOnly = value),
+              ),
+              TextButton(
+                onPressed: () => setState(() {
+                  _search.clear();
+                  _status = null;
+                  _department = null;
+                  _assignment = 'All assignments';
+                  _urgentOnly = false;
+                }),
+                child: const Text('Clear filters'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
           TextField(
             controller: _search,
             onChanged: (_) => setState(() {}),
@@ -683,6 +911,7 @@ class _AdminReportsPanelState extends State<AdminReportsPanel> {
               ),
               DropdownButtonHideUnderline(
                 child: DropdownButton<String?>(
+                  isExpanded: true,
                   value: _department,
                   hint: const Text('All departments'),
                   items: <DropdownMenuItem<String?>>[
@@ -693,7 +922,10 @@ class _AdminReportsPanelState extends State<AdminReportsPanel> {
                     ...controller.departments.map(
                       (department) => DropdownMenuItem(
                         value: department.name,
-                        child: Text(department.name),
+                        child: Text(
+                          department.name,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ),
                   ],
