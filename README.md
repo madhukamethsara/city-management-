@@ -4,7 +4,7 @@ Smart Sabha is a mobile-first civic engagement application for Sri Lankan Prades
 
 It gives residents one place to discover public projects, see them on an OpenStreetMap map, report local issues, track their cases, receive local announcements, submit community proposals, and take part in public consultations. Authorised officers receive a separate management console.
 
-> **Two modes:** demo mode includes all civic screens with seeded in-memory data. Supabase mode connects reports, projects, announcements, feed participation, profiles, private evidence and notifications to persistent storage. Apply all three migrations and follow [backend setup](BACKEND_SETUP.md) before using configured Supabase credentials. See [the roadmap](ROADMAP.md) for remaining modules.
+> **Two modes:** demo mode includes all civic screens with seeded in-memory data. Supabase mode connects reports, projects, announcements, feed participation, profiles, departments, administrator account management, private evidence and notifications to persistent storage. Apply all four migrations and follow [backend setup](BACKEND_SETUP.md) before using configured Supabase credentials. See [the roadmap](ROADMAP.md) for remaining modules.
 
 ## Included functionality
 
@@ -117,9 +117,9 @@ Connected mode never silently falls back to demo records. Projects now support
 authority-scoped officer edits, milestones, private/public updates and budgets,
 public HTTPS document links, following and transactional notifications. Resident
 and officer listings use server-side search, sorting and pagination. Project image
-uploads and feedback remain deferred. Announcements support drafts, publication, ward/GN division targeting and recipient notifications. Their feed persists comments, reactions and saved updates. Proposals, consultations and broader administration are not connected yet.
+uploads and feedback remain deferred. Announcements support drafts, publication, ward/GN division targeting and recipient notifications. Their feed persists comments, reactions and saved updates. Department edits and authority administrator account management are connected. Proposals and consultations are not connected yet.
 
-Read [BACKEND_SETUP.md](BACKEND_SETUP.md) to apply all three migrations, provision a
+Read [BACKEND_SETUP.md](BACKEND_SETUP.md) to apply all four migrations, provision a
 staging authority/officer, run the database tests, and verify deployment.
 Read [ROADMAP.md](ROADMAP.md) for remaining frontend/backend and release work.
 

@@ -275,7 +275,7 @@ class DemoCivicRepository extends CivicRepository {
         id: 'u-officer',
         fullName: 'Nimali Fernando',
         email: 'officer@smart-sabha.lk',
-        role: UserRole.departmentAdmin,
+        role: UserRole.localAuthorityAdmin,
         localAuthorityId: 'la-kumbukgate',
         ward: 'Ward 04',
         gnDivision: 'Kumbukgate South',

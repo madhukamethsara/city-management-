@@ -7,6 +7,9 @@ import '../models/domain_models.dart';
 abstract class CivicRepository {
   bool get isPersistent => false;
 
+  Future<AppUser> manageUser(AppUser user, AppUser expected) async =>
+      (await saveChanges(CivicChanges(users: [user]))).users.single;
+
   Future<AnnouncementPage> listAnnouncements({int offset = 0}) async {
     final data = await loadInitialData();
     return AnnouncementPage(

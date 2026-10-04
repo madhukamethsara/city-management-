@@ -16,6 +16,20 @@ class SupabaseCivicRepository extends CivicRepository {
   @override
   bool get isPersistent => true;
 
+  @override
+  Future<AppUser> manageUser(AppUser user, AppUser expected) =>
+      _perform(() async {
+        final saved = await client.rpc(
+          'civic_manage_user',
+          params: {
+            'payload': userToJson(user),
+            'expected_role': expected.role.name,
+            'expected_active': expected.isActive,
+          },
+        );
+        return userFromJson(Json.from(saved as Map));
+      });
+
   Future<T> _perform<T>(Future<T> Function() action) async {
     try {
       return await action();
@@ -84,8 +98,46 @@ class SupabaseCivicRepository extends CivicRepository {
 
   @override
   Future<CivicChanges> saveChanges(CivicChanges changes) => _perform(() async {
-    if (changes.departments.isNotEmpty ||
-        changes.feedItems.isNotEmpty ||
+    if (changes.departments.isNotEmpty) {
+      if (changes.departments.length != 1 ||
+          changes.users.isNotEmpty ||
+          changes.projects.isNotEmpty ||
+          changes.announcements.isNotEmpty ||
+          changes.notifications.isNotEmpty ||
+          changes.feedItems.isNotEmpty ||
+          changes.proposals.isNotEmpty ||
+          changes.consultations.isNotEmpty) {
+        throw const CivicFailure('Save one department at a time.');
+      }
+      final d = changes.departments.single;
+      final saved = Json.from(
+        await client.rpc(
+              'civic_save_department',
+              params: {
+                'payload': {
+                  'id': d.id,
+                  'name': d.name,
+                  'headName': d.headName,
+                  'officerCount': d.officerCount,
+                  'categories': d.categories,
+                },
+              },
+            )
+            as Map,
+      );
+      return CivicChanges(
+        departments: [
+          Department(
+            id: saved['id'] as String,
+            name: saved['name'] as String,
+            headName: saved['headName'] as String,
+            officerCount: saved['officerCount'] as int,
+            categories: strings(saved['categories']),
+          ),
+        ],
+      );
+    }
+    if (changes.feedItems.isNotEmpty ||
         changes.proposals.isNotEmpty ||
         changes.consultations.isNotEmpty) {
       throw const CivicFailure(

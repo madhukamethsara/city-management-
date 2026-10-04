@@ -1,7 +1,7 @@
 # Connected reports, projects, announcements and feed
 
 Supabase mode now uses persistent civic data as well as authentication.
-Apply all three migrations in order before launching a configured app. Existing auth-only
+Apply all four migrations in order before launching a configured app. Existing auth-only
 deployments must complete this setup; there is no automatic demo-data fallback.
 
 ## Configure a staging project
@@ -15,6 +15,8 @@ deployments must complete this setup; there is no automatic demo-data fallback.
    subscriptions, project RPCs and recipient-scoped project notifications. Finally,
    apply `supabase/migrations/202610020001_announcement_workflow.sql` once for
    targeted announcements, feed participation and publication notifications.
+   Then apply `supabase/migrations/202610040001_officer_management.sql` once
+   for department edits and authority-scoped administrator account management.
 3. Insert the local authorities and departments that the service actually
    supports. The fixture below is for staging only:
 
@@ -41,9 +43,11 @@ where id = '<verified-officer-auth-uuid>'::uuid
 ```
 
 5. Sign out and sign in again as the officer. Privileged roles come from the
-   database, never editable Auth user metadata. Authority transfers, role
-   changes, and account deactivation are administrator SQL operations in this
-   release, not client-side profile changes.
+   database, never editable Auth user metadata. Provision the first
+   `localAuthorityAdmin` through administrator SQL in the same way. That account
+   can change other users' roles and activity within its authority through the
+   console. Self edits and platform-admin grants by authority admins are blocked.
+   Authority transfers still require administrator SQL.
 6. Start the app with public project credentials:
 
 ```sh
@@ -80,6 +84,14 @@ Comments are shared with those same participants; they are not a public feed.
 All officer roles, including platformAdmin, remain scoped to one authority here.
 The officer directory exposes only names, IDs, roles, activity and authority to
 other officers; personal contact/location fields are not included.
+Authority and platform administrators see profiles in their own authority for
+account management. Department administrators can edit service ownership and
+categories. Administrator sections appear in the desktop rail and phone drawer.
+Analytics calculates resolution time from report history and groups all ward labels.
+
+Validate the administration migration locally with
+`node tool/test_officer_backend.mjs` after installing the SQL test dependency
+described in the existing backend test scripts. It uses an ephemeral database.
 
 ### Projects
 
@@ -122,8 +134,9 @@ other officers; personal contact/location fields are not included.
   a conflict, close the form, refresh and reopen it. Scheduling, moderation,
   older-comment browsing and project-update feed entries remain follow-up work.
 
-Proposals, consultations, broader user/department administration and aggregate
-analytics remain demo features. Unsupported routes show service availability,
+Proposals and consultations remain demo features. Analytics uses loaded civic
+records; project progress includes the currently loaded project pages.
+Unsupported routes show service availability,
 and unsupported writes fail explicitly.
 
 ## Consistency and security

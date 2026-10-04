@@ -268,6 +268,18 @@ class AppController extends ChangeNotifier {
   AppUser? get currentUser => _currentUser;
   bool get hasSession => _currentUser != null;
   bool get isOfficer => _currentUser?.isOfficer ?? false;
+
+  bool get canManageUsers =>
+      _currentUser?.isActive == true &&
+      [
+        UserRole.localAuthorityAdmin,
+        UserRole.platformAdmin,
+      ].contains(_currentUser?.role);
+
+  bool get canManageDepartments =>
+      canManageUsers ||
+      (_currentUser?.isActive == true &&
+          _currentUser?.role == UserRole.departmentAdmin);
   bool get isGuest => _currentUser?.isGuest ?? false;
   bool get canParticipate => hasSession && !isGuest;
   List<LocalAuthority> get authorities => List.unmodifiable(_authorities);
@@ -327,8 +339,21 @@ class AppController extends ChangeNotifier {
         .where((consultation) => consultation.isOpen)
         .length,
     citizenProposals: _proposals.length,
-    averageResolutionDays: 4.8,
+    averageResolutionDays: averageResolutionDays,
   );
+
+  double get averageResolutionDays {
+    final resolved = _reports.where((r) => r.status == ReportStatus.resolved);
+    if (resolved.isEmpty) return 0;
+    final days = resolved.fold<double>(0, (sum, report) {
+      final updates = report.updates.where(
+        (u) => u.status == ReportStatus.resolved,
+      );
+      final end = updates.isEmpty ? report.lastUpdated : updates.last.date;
+      return sum + max(0, end.difference(report.submittedAt).inMinutes / 1440);
+    });
+    return (days / resolved.length * 10).round() / 10;
+  }
 
   Future<void> bootstrap() async {
     if (_bootstrapInProgress) return;
@@ -724,7 +749,21 @@ class AppController extends ChangeNotifier {
     int? expectedRevision,
   }) async {
     final report = reportById(reportId);
-    if (report == null) return;
+    if (!isOfficer || _currentUser?.isActive != true) {
+      throw const CivicFailure('An active officer account is required.');
+    }
+    if (report == null) {
+      throw const CivicFailure('This case is no longer available.');
+    }
+    if (department.trim().isEmpty ||
+        !['Normal', 'High', 'Urgent'].contains(priority) ||
+        publicUpdate.trim().isEmpty ||
+        publicUpdate.trim().length > 2000 ||
+        (internalNote?.trim().length ?? 0) > 2000) {
+      throw const CivicFailure(
+        'Check the department, priority and updates (up to 2,000 characters).',
+      );
+    }
     if (expectedRevision != null && expectedRevision != report.revision) {
       throw const CivicFailure(
         'This case changed. Close this editor, refresh, and review the latest update.',
@@ -1102,22 +1141,52 @@ class AppController extends ChangeNotifier {
   Future<void> toggleUserActive(String userId) async {
     final user = _firstOrNull(_users, (item) => item.id == userId);
     if (user == null) return;
-    await _commit(
-      CivicChanges(users: [user.copyWith(isActive: !user.isActive)]),
-    );
+    await _manageUser(user.copyWith(isActive: !user.isActive), user);
     notifyListeners();
   }
 
   Future<void> changeUserRole(String userId, UserRole role) async {
     final user = _firstOrNull(_users, (item) => item.id == userId);
     if (user == null) return;
-    await _commit(CivicChanges(users: [user.copyWith(role: role)]));
+    await _manageUser(user.copyWith(role: role), user);
     notifyListeners();
   }
 
   Future<void> updateDepartment(Department department) async {
+    if (!canManageDepartments) {
+      throw const CivicFailure(
+        'A department or authority administrator is required.',
+      );
+    }
+    if (department.headName.trim().isEmpty ||
+        department.headName.length > 120 ||
+        department.officerCount < 0 ||
+        department.categories.isEmpty ||
+        department.categories.any((c) => c.trim().isEmpty || c.length > 120)) {
+      throw const CivicFailure(
+        'Enter a department head, a non-negative officer count and service categories.',
+      );
+    }
     await _commit(CivicChanges(departments: [department]));
     notifyListeners();
+  }
+
+  Future<void> _manageUser(AppUser updated, AppUser expected) async {
+    if (!canManageUsers ||
+        updated.id == currentUser?.id ||
+        updated.localAuthorityId != currentUser?.localAuthorityId ||
+        updated.role == UserRole.guest ||
+        (currentUser?.role != UserRole.platformAdmin &&
+            (updated.role == UserRole.platformAdmin ||
+                expected.role == UserRole.platformAdmin))) {
+      throw const CivicFailure(
+        'An authority administrator must manage another account in this authority.',
+      );
+    }
+    final generation = _sessionGeneration;
+    final saved = await _repository.manageUser(updated, expected);
+    _checkSession(generation);
+    _users = _mergeRecords(_users, [saved], (u) => u.id);
   }
 
   List<Object> search(String query) {

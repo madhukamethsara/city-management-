@@ -65,13 +65,46 @@ class _AdminShellState extends State<AdminShell> {
   Widget build(BuildContext context) {
     final desktop = MediaQuery.sizeOf(context).width >= 1000;
     final controller = AppScope.of(context);
+    final sections = [
+      AdminSection.overview,
+      AdminSection.reports,
+      AdminSection.projects,
+      AdminSection.announcements,
+      if (controller.canManageDepartments) AdminSection.departments,
+      if (controller.canManageUsers) AdminSection.users,
+      AdminSection.analytics,
+    ];
+    if (!sections.contains(_section)) _section = AdminSection.overview;
     if (controller.usesPersistentData) {
       return Scaffold(
+        drawer: desktop
+            ? null
+            : Drawer(
+                child: SafeArea(
+                  child: ListView(
+                    children: [
+                      for (final section in sections)
+                        ListTile(
+                          leading: Icon(section.icon),
+                          title: Text(section.label),
+                          selected: section == _section,
+                          onTap: () {
+                            Navigator.pop(context);
+                            setState(() => _section = section);
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+              ),
         appBar: AppBar(
           title: Text(switch (_section) {
             AdminSection.projects => 'Officer projects',
             AdminSection.announcements => 'Officer announcements',
             AdminSection.overview => 'Officer dashboard',
+            AdminSection.departments => 'Officer departments',
+            AdminSection.users => 'Officer users',
+            AdminSection.analytics => 'Officer analytics',
             _ => 'Officer cases',
           }),
           actions: [
@@ -109,28 +142,12 @@ class _AdminShellState extends State<AdminShell> {
           children: [
             if (desktop)
               NavigationRail(
-                selectedIndex: [
-                  AdminSection.overview,
-                  AdminSection.reports,
-                  AdminSection.projects,
-                  AdminSection.announcements,
-                ].indexOf(_section),
+                selectedIndex: sections.indexOf(_section),
                 labelType: NavigationRailLabelType.all,
-                onDestinationSelected: (index) => setState(
-                  () => _section = [
-                    AdminSection.overview,
-                    AdminSection.reports,
-                    AdminSection.projects,
-                    AdminSection.announcements,
-                  ][index],
-                ),
+                onDestinationSelected: (index) =>
+                    setState(() => _section = sections[index]),
                 destinations: [
-                  for (final section in [
-                    AdminSection.overview,
-                    AdminSection.reports,
-                    AdminSection.projects,
-                    AdminSection.announcements,
-                  ])
+                  for (final section in sections)
                     NavigationRailDestination(
                       icon: Icon(section.icon),
                       label: Text(section.label),
@@ -144,12 +161,27 @@ class _AdminShellState extends State<AdminShell> {
                 ),
                 AdminSection.projects => const AdminProjectsPanel(),
                 AdminSection.announcements => const AdminAnnouncementsPanel(),
+                AdminSection.departments =>
+                  controller.canManageDepartments
+                      ? const AdminDepartmentsPanel()
+                      : const AdminReportsPanel(),
+                AdminSection.users =>
+                  controller.canManageUsers
+                      ? const AdminUsersPanel()
+                      : const AdminReportsPanel(),
+                AdminSection.analytics => const AdminAnalyticsPanel(),
                 _ => const AdminReportsPanel(),
               },
             ),
           ],
         ),
-        bottomNavigationBar: desktop
+        bottomNavigationBar:
+            desktop ||
+                [
+                  AdminSection.departments,
+                  AdminSection.users,
+                  AdminSection.analytics,
+                ].contains(_section)
             ? null
             : NavigationBar(
                 selectedIndex: switch (_section) {
@@ -227,7 +259,11 @@ class _AdminShellState extends State<AdminShell> {
       ),
       drawer: desktop
           ? null
-          : _AdminDrawer(selected: _section, onSelected: _select),
+          : _AdminDrawer(
+              selected: _section,
+              onSelected: _select,
+              sections: sections,
+            ),
       body: panel,
     );
     if (!desktop) return main;
@@ -236,7 +272,7 @@ class _AdminShellState extends State<AdminShell> {
         children: <Widget>[
           SafeArea(
             child: NavigationRail(
-              selectedIndex: AdminSection.values.indexOf(_section),
+              selectedIndex: sections.indexOf(_section),
               labelType: NavigationRailLabelType.all,
               leading: const Padding(
                 padding: EdgeInsets.fromLTRB(0, 12, 0, 16),
@@ -256,9 +292,8 @@ class _AdminShellState extends State<AdminShell> {
                   ],
                 ),
               ),
-              onDestinationSelected: (index) =>
-                  _select(AdminSection.values[index]),
-              destinations: AdminSection.values
+              onDestinationSelected: (index) => _select(sections[index]),
+              destinations: sections
                   .map(
                     (section) => NavigationRailDestination(
                       icon: Icon(section.icon),
@@ -296,10 +331,15 @@ class _AdminShellState extends State<AdminShell> {
 }
 
 class _AdminDrawer extends StatelessWidget {
-  const _AdminDrawer({required this.selected, required this.onSelected});
+  const _AdminDrawer({
+    required this.selected,
+    required this.onSelected,
+    required this.sections,
+  });
 
   final AdminSection selected;
   final ValueChanged<AdminSection> onSelected;
+  final List<AdminSection> sections;
 
   @override
   Widget build(BuildContext context) {
@@ -321,7 +361,7 @@ class _AdminDrawer extends StatelessWidget {
               ),
             ),
             const Divider(),
-            ...AdminSection.values.map(
+            ...sections.map(
               (section) => ListTile(
                 leading: Icon(section.icon),
                 title: Text(section.label),
@@ -729,7 +769,7 @@ class _BarChartCard extends StatelessWidget {
           Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
           const SizedBox(height: 18),
           SizedBox(
-            height: 160,
+            height: 120 + MediaQuery.textScalerOf(context).scale(64),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: values.entries
@@ -2354,7 +2394,9 @@ class AdminDepartmentsPanel extends StatelessWidget {
             (department) => Padding(
               padding: const EdgeInsets.only(bottom: 10),
               child: CivicCard(
-                onTap: () => _editDepartment(context, department),
+                onTap: AppScope.of(context).canManageDepartments
+                    ? () => _editDepartment(context, department)
+                    : null,
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
@@ -2431,61 +2473,76 @@ class AdminDepartmentsPanel extends StatelessWidget {
           20,
           MediaQuery.viewInsetsOf(context).bottom + 22,
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              'Manage ${department.name}',
-              style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: head,
-              decoration: const InputDecoration(labelText: 'Department head'),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: officers,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Officer count'),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: categories,
-              minLines: 2,
-              maxLines: 4,
-              decoration: const InputDecoration(
-                labelText: 'Categories handled (comma separated)',
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                'Manage ${department.name}',
+                style: const TextStyle(
+                  fontSize: 21,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
-            ),
-            const SizedBox(height: 18),
-            FilledButton(
-              onPressed: () async {
-                if (!await saveCivicAction(
-                  context,
-                  () => AppScope.of(context).updateDepartment(
-                    department.copyWith(
-                      headName: head.text.trim(),
-                      officerCount:
-                          int.tryParse(officers.text) ??
-                          department.officerCount,
-                      categories: categories.text
-                          .split(',')
-                          .map((value) => value.trim())
-                          .where((value) => value.isNotEmpty)
-                          .toList(),
+              const SizedBox(height: 16),
+              TextField(
+                controller: head,
+                decoration: const InputDecoration(labelText: 'Department head'),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: officers,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Officer count'),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: categories,
+                minLines: 2,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  labelText: 'Categories handled (comma separated)',
+                ),
+              ),
+              const SizedBox(height: 18),
+              FilledButton(
+                onPressed: () async {
+                  if (int.tryParse(officers.text.trim()) == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Enter a non-negative whole number of officers.',
+                        ),
+                      ),
+                    );
+                    return;
+                  }
+                  if (!await saveCivicAction(
+                    context,
+                    () => AppScope.of(context).updateDepartment(
+                      department.copyWith(
+                        headName: head.text.trim(),
+                        officerCount:
+                            int.tryParse(officers.text) ??
+                            department.officerCount,
+                        categories: categories.text
+                            .split(',')
+                            .map((value) => value.trim())
+                            .where((value) => value.isNotEmpty)
+                            .toList(),
+                      ),
                     ),
-                  ),
-                )) {
-                  return;
-                }
-                if (!context.mounted) return;
-                Navigator.pop(context);
-              },
-              child: const Text('Save department'),
-            ),
-          ],
+                  )) {
+                    return;
+                  }
+                  if (!context.mounted) return;
+                  Navigator.pop(context);
+                },
+                child: const Text('Save department'),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -2568,7 +2625,14 @@ class _AdminUsersPanelState extends State<AdminUsersPanel> {
             (user) => Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: CivicCard(
-                onTap: () => _editUser(user),
+                onTap:
+                    controller.canManageUsers &&
+                        user.id != controller.currentUser?.id &&
+                        (controller.currentUser?.role ==
+                                UserRole.platformAdmin ||
+                            user.role != UserRole.platformAdmin)
+                    ? () => _editUser(user)
+                    : null,
                 child: Row(
                   children: <Widget>[
                     CircleAvatar(
@@ -2576,7 +2640,9 @@ class _AdminUsersPanelState extends State<AdminUsersPanel> {
                           ? AppColors.mint
                           : const Color(0xFFECECEC),
                       child: Text(
-                        user.fullName.substring(0, 1).toUpperCase(),
+                        user.fullName.isEmpty
+                            ? '?'
+                            : user.fullName.substring(0, 1).toUpperCase(),
                         style: TextStyle(
                           color: user.isActive
                               ? AppColors.deepGreen
@@ -2650,7 +2716,13 @@ class _AdminUsersPanelState extends State<AdminUsersPanel> {
                     value: role,
                     decoration: const InputDecoration(labelText: 'Role'),
                     items: UserRole.values
-                        .where((item) => item != UserRole.guest)
+                        .where(
+                          (item) =>
+                              item != UserRole.guest &&
+                              (item != UserRole.platformAdmin ||
+                                  AppScope.of(context).currentUser?.role ==
+                                      UserRole.platformAdmin),
+                        )
                         .map(
                           (item) => DropdownMenuItem(
                             value: item,
@@ -2721,11 +2793,12 @@ class AdminAnalyticsPanel extends StatelessWidget {
     final byWard = <String, int>{};
     for (final report in reports) {
       byCategory[report.category] = (byCategory[report.category] ?? 0) + 1;
-      final ward = report.locationLabel.contains('Ward 02')
-          ? 'Ward 02'
-          : report.locationLabel.contains('Ward 04')
-          ? 'Ward 04'
-          : 'Other';
+      final ward =
+          RegExp(
+            r'Ward\s+\d+',
+            caseSensitive: false,
+          ).firstMatch(report.locationLabel)?.group(0) ??
+          'Other';
       byWard[ward] = (byWard[ward] ?? 0) + 1;
     }
     return ResponsivePage(
@@ -2740,14 +2813,15 @@ class AdminAnalyticsPanel extends StatelessWidget {
           const SizedBox(height: 18),
           LayoutBuilder(
             builder: (context, constraints) {
-              final count = constraints.maxWidth >= 800 ? 4 : 2;
-              return GridView.count(
-                crossAxisCount: count,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                childAspectRatio: count == 4 ? 1.4 : 1.15,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
+              final count = constraints.maxWidth >= 1000
+                  ? 4
+                  : constraints.maxWidth >= 580
+                  ? 2
+                  : 1;
+              final width = (constraints.maxWidth - 12 * (count - 1)) / count;
+              return Wrap(
+                spacing: 12,
+                runSpacing: 12,
                 children: <Widget>[
                   MetricTile(
                     label: 'Received',
@@ -2774,7 +2848,7 @@ class AdminAnalyticsPanel extends StatelessWidget {
                     icon: Icons.timer_outlined,
                     color: AppColors.warning,
                   ),
-                ],
+                ].map((tile) => SizedBox(width: width, child: tile)).toList(),
               );
             },
           ),
