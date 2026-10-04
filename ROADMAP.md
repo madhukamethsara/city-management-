@@ -56,8 +56,10 @@ project-update feed entries and older-comment browsing remain follow-up work.
 
 1. Proposals and consultations: persistent text answers and comments, one
    participation per person, review workflow and supported attachments.
-2. Administration: audited, server-authorised user/role changes, authority
-   transfers, departments and aggregate metrics computed from actual data.
+2. Administration follow-up: audit history, authority transfers, department
+   creation/removal and server-side analytics across all project pages.
+   Existing department edits and authority-scoped role/activity management now
+   persist through permission-checked RPCs. Resolution metrics use case history.
 
 Deliver and test each module end to end before exposing it in connected mode.
 

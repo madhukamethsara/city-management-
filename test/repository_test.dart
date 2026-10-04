@@ -102,6 +102,10 @@ void main() {
       controller.confirmReportResolution(original.id, resolved: true),
       throwsStateError,
     );
+    await controller.signIn(
+      email: 'officer@smart-sabha.lk',
+      password: 'demo12345',
+    );
     await expectLater(
       controller.updateReportStatus(
         reportId: original.id,
