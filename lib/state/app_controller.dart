@@ -1171,6 +1171,56 @@ class AppController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> createDepartment(Department department) async {
+    if (!canManageUsers) {
+      throw const CivicFailure('An authority administrator is required.');
+    }
+    if (!RegExp(r'^[A-Za-z0-9_-]{1,120}$').hasMatch(department.id) ||
+        department.name.trim().isEmpty ||
+        department.name.length > 120 ||
+        department.headName.trim().isEmpty ||
+        department.headName.length > 120 ||
+        department.officerCount < 0 ||
+        department.officerCount > 999999 ||
+        department.categories.isEmpty ||
+        department.categories.length > 100 ||
+        department.categories.any((c) => c.trim().isEmpty || c.length > 120)) {
+      throw const CivicFailure(
+        'Enter a name, head, officer count (0–999999) and 1–100 service categories.',
+      );
+    }
+    if (_departments.any(
+      (d) =>
+          d.id != department.id &&
+          d.name.trim().toLowerCase() == department.name.trim().toLowerCase(),
+    )) {
+      throw const CivicFailure('A department with this name already exists.');
+    }
+    final generation = _sessionGeneration;
+    final saved = await _repository.createDepartment(department);
+    _checkSession(generation);
+    _departments = _mergeRecords(_departments, [saved], (d) => d.id);
+    notifyListeners();
+  }
+
+  Future<void> removeDepartment(Department department) async {
+    if (!canManageUsers) {
+      throw const CivicFailure('An authority administrator is required.');
+    }
+    if (_reports.any((r) => r.department == department.name) ||
+        _projects.any((p) => p.department == department.name) ||
+        _announcements.any((a) => a.department == department.name)) {
+      throw const CivicFailure(
+        'This department still owns reports, projects or announcements. Reassign those records before removal.',
+      );
+    }
+    final generation = _sessionGeneration;
+    await _repository.removeDepartment(department);
+    _checkSession(generation);
+    _departments = _departments.where((d) => d.id != department.id).toList();
+    notifyListeners();
+  }
+
   Future<void> _manageUser(AppUser updated, AppUser expected) async {
     if (!canManageUsers ||
         updated.id == currentUser?.id ||

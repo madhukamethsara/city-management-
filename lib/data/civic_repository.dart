@@ -7,6 +7,14 @@ import '../models/domain_models.dart';
 abstract class CivicRepository {
   bool get isPersistent => false;
 
+  Future<Department> createDepartment(Department department) async =>
+      (await saveChanges(
+        CivicChanges(departments: [department]),
+      )).departments.single;
+
+  Future<void> removeDepartment(Department department) =>
+      throw UnimplementedError('Department removal is not supported.');
+
   Future<AppUser> manageUser(AppUser user, AppUser expected) async =>
       (await saveChanges(CivicChanges(users: [user]))).users.single;
 

@@ -38,12 +38,13 @@ try {
     grant select,insert on storage.objects to authenticated;
   `);
   for (const file of ['202609290001_report_workflow.sql','202609300001_project_workflow.sql',
-    '202610020001_announcement_workflow.sql','202610040001_officer_management.sql']) {
+    '202610020001_announcement_workflow.sql','202610040001_officer_management.sql',
+    '202610050001_department_lifecycle.sql']) {
     await db.exec(await readFile(new URL('../supabase/migrations/' + file, import.meta.url), 'utf8'));
   }
   await db.exec(`
     insert into civic_private.authorities values ('a','{}'),('b','{}');
-    insert into civic_private.departments values
+    insert into civic_private.departments(id,authority_id,data) values
       ('roads','a','{"name":"Roads","categories":["Road Damage"],"officerCount":0}'),
       ('other','b','{"name":"Other"}');
   `);
@@ -91,5 +92,55 @@ try {
   check((await saveDepartment({...department,officerCount:5})).officerCount === 5);
   await denied(() => edit(admin));
   check((await rpc('civic_bootstrap')).departments[0].officerCount === 5);
+  const newDepartment = {id:'parks',name:'Parks',headName:'Park Head',officerCount:0,
+    categories:['Parks']};
+  const createDepartment = d => rpc('civic_create_department',[JSON.stringify(d)],['jsonb']);
+  const removeDepartment = d => rpc('civic_remove_department',[JSON.stringify(d)],['jsonb']);
+  // Department admins retain editing permission but cannot create or remove departments.
+  await denied(() => createDepartment(newDepartment));
+  await denied(() => removeDepartment(updated));
+  await asUser(null,'anon');
+  await denied(() => createDepartment(newDepartment));
+  await denied(() => removeDepartment(updated));
+  await asUser(outsider);
+  await denied(() => createDepartment(newDepartment));
+  await asUser(admin);
+  for (const invalid of [{name:''},{headName:''},{officerCount:-1},{officerCount:1.5},
+    {categories:[]},{categories:[null]},{id:'bad id'}]) {
+    await denied(() => createDepartment({...newDepartment,...invalid}), '22023');
+  }
+  await denied(() => createDepartment({...newDepartment,id:'other'}));
+  const created = await createDepartment({...newDepartment,authorityId:'b',unexpected:'ignored'});
+  check(created.name === 'Parks' && !('authorityId' in created) && !('unexpected' in created));
+  check((await createDepartment(newDepartment)).id === created.id);
+  await denied(() => createDepartment({...newDepartment,headName:'Changed'}), '40001');
+  await denied(() => createDepartment({...newDepartment,id:'duplicate',name:' parks '}), '23505');
+  await denied(() => removeDepartment({...created,headName:'stale'}), '40001');
+  await denied(() => removeDepartment({id:'other'}));
+  // Every civic ownership collection blocks removal, including drafts and historical cases.
+  for (const table of ['reports','projects','announcements']) {
+    await db.exec('reset role');
+    if (table === 'reports') {
+      await db.query(`insert into civic_private.reports(id,authority_id,owner_id,case_number,data)
+        values('reference','a',$1,'CASE-REF','{"department":"Parks"}')`,[resident]);
+    } else {
+      await db.query(`insert into civic_private.${table}(id,authority_id,created_by,data,initial_payload)
+        values('reference','a',$1,'{"department":"Parks"}','{}')`,[admin]);
+    }
+    await asUser(admin);
+    await denied(() => removeDepartment(created), '23503');
+    check((await rpc('civic_bootstrap')).departments.some(d => d.id === created.id));
+    await db.exec('reset role');
+    await db.exec(`delete from civic_private.${table} where id='reference'`);
+  }
+  await asUser(admin);
+  await removeDepartment(created);
+  await removeDepartment(created); // repeat after a lost response
+  check(!(await rpc('civic_bootstrap')).departments.some(d => d.id === created.id));
+  await db.exec('reset role');
+  await db.query('update civic_private.profiles set active=false where id=$1',[admin]);
+  await asUser(admin);
+  await denied(() => createDepartment(newDepartment));
+  await denied(() => removeDepartment(created));
   console.log(`Officer backend: ${checks} checks passed.`);
 } finally { await db.close(); }

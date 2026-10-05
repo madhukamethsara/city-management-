@@ -1,7 +1,7 @@
 # Connected reports, projects, announcements and feed
 
 Supabase mode now uses persistent civic data as well as authentication.
-Apply all four migrations in order before launching a configured app. Existing auth-only
+Apply all five migrations in order before launching a configured app. Existing auth-only
 deployments must complete this setup; there is no automatic demo-data fallback.
 
 ## Configure a staging project
@@ -17,6 +17,12 @@ deployments must complete this setup; there is no automatic demo-data fallback.
    targeted announcements, feed participation and publication notifications.
    Then apply `supabase/migrations/202610040001_officer_management.sql` once
    for department edits and authority-scoped administrator account management.
+   Then apply `supabase/migrations/202610050001_department_lifecycle.sql` once
+   for authority-admin department creation and removal. Department admins can
+   still edit existing departments. Creation retries reuse the form request ID;
+   duplicate names within an authority are rejected. Removal requires the current
+   department snapshot and is blocked by any report, project or announcement
+   referencing its name, including historical records and drafts.
 3. Insert the local authorities and departments that the service actually
    supports. The fixture below is for staging only:
 
@@ -169,6 +175,7 @@ npm install --prefix .dart_tool/sql-validation --no-audit --no-fund --ignore-scr
 node tool/test_report_backend.mjs
 node tool/test_project_backend.mjs
 node tool/test_announcement_backend.mjs
+node tool/test_officer_backend.mjs
 ```
 
 The SQL test executes the actual migration against ephemeral PostgreSQL with
