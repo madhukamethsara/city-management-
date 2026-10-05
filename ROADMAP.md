@@ -57,9 +57,13 @@ project-update feed entries and older-comment browsing remain follow-up work.
 1. Proposals and consultations: persistent text answers and comments, one
    participation per person, review workflow and supported attachments.
 2. Administration follow-up: audit history, authority transfers, department
-   creation/removal and server-side analytics across all project pages.
+   lifecycle staging verification and server-side analytics across all project pages.
    Existing department edits and authority-scoped role/activity management now
    persist through permission-checked RPCs. Resolution metrics use case history.
+   Department creation/removal is implemented locally with authority-admin permissions,
+   creation retries, duplicate-name checks and protection for referenced departments.
+   Apply the department lifecycle migration after officer management in staging and
+   verify create -> edit -> reload -> remove across real administrator sessions.
 
 Deliver and test each module end to end before exposing it in connected mode.
 

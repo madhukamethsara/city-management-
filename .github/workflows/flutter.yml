@@ -61,3 +61,5 @@ jobs:
         run: node tool/test_project_backend.mjs
       - name: Test announcement targeting, publication and feed participation
         run: node tool/test_announcement_backend.mjs
+      - name: Test officer permissions and department lifecycle
+        run: node tool/test_officer_backend.mjs

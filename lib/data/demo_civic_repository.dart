@@ -8,6 +8,14 @@ class DemoCivicRepository extends CivicRepository {
 
   final Map<String, AppUser> _savedUsers = {};
   final Map<String, Department> _savedDepartments = {};
+  final Set<String> _removedDepartmentIds = {};
+
+  @override
+  Future<void> removeDepartment(Department department) async {
+    _removedDepartmentIds.add(department.id);
+    _savedDepartments.remove(department.id);
+  }
+
   final Map<String, Project> _savedProjects = {};
   final Map<String, FeedItem> _savedFeedItems = {};
   final Map<String, Proposal> _savedProposals = {};
@@ -112,7 +120,7 @@ class DemoCivicRepository extends CivicRepository {
         data.departments,
         _savedDepartments,
         (item) => item.id,
-      ),
+      ).where((d) => !_removedDepartmentIds.contains(d.id)).toList(),
       users: _merge(data.users, _savedUsers, (item) => item.id),
       projects: _merge(data.projects, _savedProjects, (item) => item.id),
       reports: reports.values.toList(),

@@ -2389,6 +2389,15 @@ class AdminDepartmentsPanel extends StatelessWidget {
             subtitle:
                 'Maintain service ownership, heads, officers and complaint categories.',
           ),
+          if (AppScope.of(context).canManageUsers)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: FilledButton.icon(
+                onPressed: () => _editDepartment(context, null),
+                icon: const Icon(Icons.add),
+                label: const Text('Create department'),
+              ),
+            ),
           const SizedBox(height: 16),
           ...departments.map(
             (department) => Padding(
@@ -2443,7 +2452,21 @@ class AdminDepartmentsPanel extends StatelessWidget {
                         ],
                       ),
                     ),
-                    const Icon(Icons.edit_outlined, color: AppColors.deepGreen),
+                    Column(
+                      children: [
+                        const Icon(
+                          Icons.edit_outlined,
+                          color: AppColors.deepGreen,
+                        ),
+                        if (AppScope.of(context).canManageUsers)
+                          IconButton(
+                            tooltip: 'Remove ${department.name}',
+                            icon: const Icon(Icons.delete_outline),
+                            onPressed: () =>
+                                _removeDepartment(context, department),
+                          ),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -2456,15 +2479,22 @@ class AdminDepartmentsPanel extends StatelessWidget {
 
   Future<void> _editDepartment(
     BuildContext context,
-    Department department,
+    Department? department,
   ) async {
-    final head = TextEditingController(text: department.headName);
-    final officers = TextEditingController(text: '${department.officerCount}');
-    final categories = TextEditingController(
-      text: department.categories.join(', '),
+    final requestId = 'd-${DateTime.now().microsecondsSinceEpoch}';
+    final name = TextEditingController(text: department?.name ?? '');
+    final head = TextEditingController(text: department?.headName ?? '');
+    final officers = TextEditingController(
+      text: '${department?.officerCount ?? 0}',
     );
-    await showModalBottomSheet<void>(
-      context: context,
+    final categories = TextEditingController(
+      text: department?.categories.join(', ') ?? '',
+    );
+    final route = ModalBottomSheetRoute<void>(
+      capturedThemes: InheritedTheme.capture(
+        from: context,
+        to: Navigator.of(context).context,
+      ),
       isScrollControlled: true,
       builder: (context) => Padding(
         padding: EdgeInsets.fromLTRB(
@@ -2479,13 +2509,24 @@ class AdminDepartmentsPanel extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               Text(
-                'Manage ${department.name}',
+                department == null
+                    ? 'Create department'
+                    : 'Manage ${department.name}',
                 style: const TextStyle(
                   fontSize: 21,
                   fontWeight: FontWeight.w900,
                 ),
               ),
               const SizedBox(height: 16),
+              if (department == null) ...[
+                TextField(
+                  controller: name,
+                  decoration: const InputDecoration(
+                    labelText: 'Department name',
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
               TextField(
                 controller: head,
                 decoration: const InputDecoration(labelText: 'Department head'),
@@ -2518,22 +2559,22 @@ class AdminDepartmentsPanel extends StatelessWidget {
                     );
                     return;
                   }
-                  if (!await saveCivicAction(
-                    context,
-                    () => AppScope.of(context).updateDepartment(
-                      department.copyWith(
-                        headName: head.text.trim(),
-                        officerCount:
-                            int.tryParse(officers.text) ??
-                            department.officerCount,
-                        categories: categories.text
-                            .split(',')
-                            .map((value) => value.trim())
-                            .where((value) => value.isNotEmpty)
-                            .toList(),
-                      ),
-                    ),
-                  )) {
+                  if (!await saveCivicAction(context, () {
+                    final edited = Department(
+                      id: department?.id ?? requestId,
+                      name: department?.name ?? name.text.trim(),
+                      headName: head.text.trim(),
+                      officerCount: int.parse(officers.text.trim()),
+                      categories: categories.text
+                          .split(',')
+                          .map((value) => value.trim())
+                          .where((value) => value.isNotEmpty)
+                          .toList(),
+                    );
+                    return department == null
+                        ? AppScope.of(context).createDepartment(edited)
+                        : AppScope.of(context).updateDepartment(edited);
+                  })) {
                     return;
                   }
                   if (!context.mounted) return;
@@ -2546,9 +2587,46 @@ class AdminDepartmentsPanel extends StatelessWidget {
         ),
       ),
     );
+    await Navigator.of(context).push(route);
+    // The pop future resolves before the sheet's closing animation unmounts fields.
+    await route.completed;
+    name.dispose();
     head.dispose();
     officers.dispose();
     categories.dispose();
+  }
+
+  Future<void> _removeDepartment(
+    BuildContext context,
+    Department department,
+  ) async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Remove ${department.name}?'),
+        content: const Text(
+          'Only unused departments can be removed. Reports, projects and announcements must be reassigned first.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              if (await saveCivicAction(
+                    context,
+                    () => AppScope.of(context).removeDepartment(department),
+                  ) &&
+                  context.mounted) {
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Remove department'),
+          ),
+        ],
+      ),
+    );
   }
 }
 

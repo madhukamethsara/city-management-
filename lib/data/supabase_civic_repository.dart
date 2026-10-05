@@ -43,6 +43,8 @@ class SupabaseCivicRepository extends CivicRepository {
           'You do not have permission for this action. Check your account and local authority.',
         '23505' =>
           'This request was already saved. Refresh to see the latest version.',
+        '23503' =>
+          'This department still owns reports, projects or announcements. Reassign those records before removal.',
         '22023' => 'Check the required fields and try again.',
         _ => 'Could not save or load civic data. Please try again.',
       });
@@ -52,6 +54,41 @@ class SupabaseCivicRepository extends CivicRepository {
       );
     }
   }
+
+  Map<String, dynamic> _departmentPayload(Department d) => {
+    'id': d.id,
+    'name': d.name,
+    'headName': d.headName,
+    'officerCount': d.officerCount,
+    'categories': d.categories,
+  };
+
+  @override
+  Future<Department> createDepartment(Department department) =>
+      _perform(() async {
+        final saved = Json.from(
+          await client.rpc(
+                'civic_create_department',
+                params: {'payload': _departmentPayload(department)},
+              )
+              as Map,
+        );
+        return Department(
+          id: saved['id'] as String,
+          name: saved['name'] as String,
+          headName: saved['headName'] as String,
+          officerCount: saved['officerCount'] as int,
+          categories: strings(saved['categories']),
+        );
+      });
+
+  @override
+  Future<void> removeDepartment(Department department) => _perform(() async {
+    await client.rpc(
+      'civic_remove_department',
+      params: {'payload': _departmentPayload(department)},
+    );
+  });
 
   @override
   Future<InitialCivicData> loadInitialData() => _perform(() async {
