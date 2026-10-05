@@ -1,159 +1,141 @@
-# Smart Sabha — Flutter Frontend
+﻿# Smart Sabha
 
-Smart Sabha is a mobile-first civic engagement application for Sri Lankan Pradeshiya Sabhas, Urban Councils, and Municipal Councils.
+Smart Sabha is a Flutter civic engagement app for Sri Lankan Pradeshiya Sabhas, Urban Councils and Municipal Councils. Residents can report local issues, track cases, follow public projects and participate in local announcements. Officers and administrators manage civic services through a role-aware console.
 
-It gives residents one place to discover public projects, see them on an OpenStreetMap map, report local issues, track their cases, receive local announcements, submit community proposals, and take part in public consultations. Authorised officers receive a separate management console.
+The project targets Android, iOS and responsive web. It includes a full in-memory demo and a Supabase implementation for the core workflows. Live staging, device and production release verification remain pending; see [the roadmap](ROADMAP.md).
 
-> **Two modes:** demo mode includes all civic screens with seeded in-memory data. Supabase mode connects reports, projects, announcements, feed participation, profiles, departments, administrator account management, private evidence and notifications to persistent storage. Apply all four migrations and follow [backend setup](BACKEND_SETUP.md) before using configured Supabase credentials. See [the roadmap](ROADMAP.md) for remaining modules.
+## Features and delivery status
 
-## Included functionality
+| Area | Supabase mode |
+| --- | --- |
+| Authentication and profiles | Email/password sign-in, registration, recovery, persistent onboarding and database-assigned roles |
+| Issue reports | Case numbers, private evidence uploads, comments, assignment, status history, internal notes and resident resolution confirmation |
+| Projects | Officer creation/editing, milestones, progress, budgets with resident privacy, public HTTPS document links, subscriptions and paginated search |
+| Announcements and feed | Drafts, publication, ward/GN division targeting, recipient notifications, comments, reactions and saved updates |
+| Departments | Persistent edits; authority administrators can create departments and remove unused departments |
+| Account management | Authority-scoped role and active-state management with server permission checks |
+| Notifications | Recipient-specific in-app notifications and persistent read state |
+| Proposals and consultations | Demo only; connected workflows remain on the roadmap |
 
-### Citizen experience
+The interface includes an OpenStreetMap explorer, responsive navigation and officer case-management views. Project image uploads, binary document uploads and persistent project feedback remain deferred. Analytics uses available case data; server-side analytics across all pages remains follow-up work.
 
-- Welcome, registration, login, forgot-password, and reset-password flows
-- Guest browsing and role-aware access prompts
-- Five-step onboarding: personal details, authority/ward, private approximate location, review, completion
-- Responsive citizen shell: Home, Explore, Report, Projects, Notifications, Profile
-- Public-project search, sort, status filtering, grid/list views, budget transparency, milestones, updates, documents, feedback, follow updates
-- Interactive OpenStreetMap map with project, report, and facility markers
-- Multi-step issue reporting with location pinning, gallery image selection, duplicate-report detection, case number generation, and tracking
-- Report timeline, resident resolution confirmation, comments, and follow updates
-- Civic feed with reactions, comments, save, and clipboard sharing
-- Local announcements, community proposals, support/follow/comment flows, and consultations
-- Notification state with unread counts and mark-all-read behaviour
-- Global search across visible projects, announcements, reports, proposals, and consultations
+## Quick start
 
-### Officer experience
+Use Flutter **3.32.8** with Dart **3.8.1**, the CI baseline, or a compatible newer SDK. Keep `pubspec.lock` committed for reproducible dependencies.
 
-- Protected officer console with responsive sidebar/drawer navigation
-- Operational metrics and visual charts
-- Searchable/filterable complaint table with department, officer, priority, public update, internal note, and completion-evidence controls
-- Project creation and management: status, progress, budget visibility, contractor, milestone, public update, document, and image inputs
-- Announcement create/edit/draft/publish/archive controls with geographic targeting
-- Department head, officer-count, and service-category management
-- User search, role assignment, and activate/deactivate controls
-- Aggregate complaint, ward, category, project-progress, and service-resolution analytics
+```sh
+git clone https://github.com/madhukamethsara/city-management-.git
+cd city-management-
+flutter pub get --enforce-lockfile
+flutter run -d chrome --dart-define=AUTH_MODE=demo
+```
 
-## Main demo accounts
+Use `flutter devices` to list targets, then `flutter run -d <device-id> --dart-define=AUTH_MODE=demo` for an emulator or physical device. Android requires the Android SDK; iOS development requires macOS and Xcode. Web development requires Chrome.
 
-| Account | Email | Password |
+### Demo accounts
+
+| Role | Email | Password |
 | --- | --- | --- |
-| Citizen | `citizen@smart-sabha.lk` | `demo12345` |
-| Officer | `officer@smart-sabha.lk` | `demo12345` |
+| Resident | `citizen@smart-sabha.lk` | `demo12345` |
+| Authority administrator | `officer@smart-sabha.lk` | `demo12345` |
+| Officer | `dilan.w@smart-sabha.lk` | `demo12345` |
 
-Demo sign-in checks the listed credentials. Supabase authentication is available when configured; see [authentication setup](AUTH_SETUP.md) for project settings, callback URLs, and live verification. Connected report data is persistent after completing [backend setup](BACKEND_SETUP.md). Projects are also persistent, including officer edits, budget privacy, public document links, subscriptions and paginated search. Announcements and their public feed are also persistent, including geographic targeting, comments, reactions and saves. Proposals and consultations remain demo-only.
+Demo data is seeded and held in memory. It resets when the app restarts. These accounts are demo fixtures, not accounts in your Supabase project.
 
-## Folder structure
+## Connect Supabase
+
+Follow [authentication setup](AUTH_SETUP.md) for email delivery, callback URLs and session configuration, then [backend setup](BACKEND_SETUP.md) for database provisioning and verification.
+
+Apply all five migrations in order before starting connected mode:
+
+1. `supabase/migrations/202609290001_report_workflow.sql`
+2. `supabase/migrations/202609300001_project_workflow.sql`
+3. `supabase/migrations/202610020001_announcement_workflow.sql`
+4. `supabase/migrations/202610040001_officer_management.sql`
+5. `supabase/migrations/202610050001_department_lifecycle.sql`
+
+Provision actual authorities and departments, register staging users, and assign the initial officer/administrator roles as described in the backend guide. New accounts start as citizens. Server functions enforce authority and role permissions; connected mode does not fall back to demo records.
+
+For local web development, allow `http://localhost:3000/` in Supabase Auth and run:
+
+```sh
+flutter run -d chrome --web-port=3000 --dart-define=AUTH_MODE=supabase --dart-define=SUPABASE_URL=https://YOUR_PROJECT.supabase.co --dart-define=SUPABASE_ANON_KEY=YOUR_PUBLIC_KEY --dart-define=AUTH_REDIRECT_URL=http://localhost:3000/
+```
+
+For Android/iOS, omit the web redirect override to use `lk.smartsabha.app://auth-callback`. Register that callback in Supabase Auth. Use the same public project settings for builds.
+
+### Configuration
+
+Settings are supplied through `--dart-define`. [.env.example](.env.example) documents the values; the app does **not** load that file automatically.
+
+| Setting | Purpose |
+| --- | --- |
+| `AUTH_MODE` | `auto` (default), `demo` or `supabase`. Auto selects Supabase when either project setting is present; both settings must be valid. |
+| `SUPABASE_URL` | Supabase project URL |
+| `SUPABASE_ANON_KEY` | Public publishable/anon key; never use a service-role or secret key |
+| `AUTH_REDIRECT_URL` | Optional absolute authentication callback URL |
+| `MAP_TILES_URL` | Tile URL template; defaults to `https://tile.openstreetmap.org/{z}/{x}/{y}.png` |
+
+## Project structure
 
 ```text
-smart_sabha_flutter/
-├── lib/
-│   ├── app.dart                         # Route protection and application bootstrap
-│   ├── core/
-│   │   ├── constants/app_copy.dart      # Translation-ready labels
-│   │   └── theme/app_theme.dart          # Civic design system
-│   ├── data/demo_civic_repository.dart  # Seeded frontend repository implementation
-│   ├── models/domain_models.dart         # Strongly typed domain models
-│   ├── state/
-│   │   ├── app_controller.dart           # Shared application state and mutations
-│   │   └── app_scope.dart                # Inherited app controller scope
-│   ├── widgets/
-│   │   ├── app_widgets.dart              # Reusable cards, states, badges, metrics
-│   │   ├── civic_map.dart                # OpenStreetMap map component
-│   │   └── civic_shell.dart              # Citizen navigation shell
-│   └── features/
-│       ├── auth/                         # Authentication and welcome screens
-│       ├── onboarding/                   # Resident profile onboarding
-│       ├── citizen/                      # Home, feed, notifications, profile, search
-│       ├── projects/                     # Project explorer, detail, map
-│       ├── reports/                      # Issue creation and case tracking
-│       ├── community/                    # Announcements, proposals, consultations
-│       └── admin/                        # Officer dashboard and admin management
-├── .env.example
-├── analysis_options.yaml
-└── pubspec.yaml
+lib/
+  app.dart             Application bootstrap and protected routes
+  core/                Configuration, copy and theme
+  data/                Repository contracts, demo/Supabase adapters and codecs
+  models/              Civic domain models
+  state/               Shared controller and inherited application scope
+  features/            Auth, onboarding, citizen, reports, projects, community, admin
+  widgets/             Shared UI, navigation and map components
+supabase/migrations/   Ordered database migrations and permission-checked RPCs
+test/                  Flutter unit, repository, workflow and layout tests
+tool/                  Executable PostgreSQL permission/workflow tests
+.github/workflows/     CI checks
 ```
 
-## Run locally
+## Validation
 
-Use Flutter 3.32.8 / Dart 3.8.1 or a compatible newer stable SDK, then run these commands from this folder:
+Run the Flutter checks from the repository root:
 
-```bash
-flutter pub get
-flutter run -d chrome
-```
-
-Android, iOS, and web runners are included. Use `flutter devices` to list available targets and `flutter run -d <device-id>` to select one. iOS builds require macOS and Xcode. Keep `pubspec.lock` checked in for reproducible dependency versions.
-
-The Android runner includes the internet permission needed to display maps in release builds:
-
-```xml
-<uses-permission android:name="android.permission.INTERNET" />
-```
-
-## Configuration
-
-Copy the placeholders from `.env.example` into your own secret-management flow. The map URL can be supplied at runtime without adding a dotenv package:
-
-```bash
-flutter run \
-  --dart-define=MAP_TILES_URL=https://tile.openstreetmap.org/{z}/{x}/{y}.png \
-  --dart-define=SUPABASE_URL=https://your-project.supabase.co \
-  --dart-define=SUPABASE_ANON_KEY=your-anon-key
-```
-
-Never bundle a Supabase service-role key in this mobile application.
-
-## Backend status
-
-`SupabaseCivicRepository` implements the first connected workflow: resident
-report submission, authority-scoped officer review, comments/evidence, case
-tracking, private notes, and recipient-scoped notifications. Profiles restore
-onboarding and database-assigned roles. Server functions enforce permissions
-and transaction boundaries. Client state is cleared on account changes.
-
-`DemoCivicRepository` continues to support the full feature demonstration.
-Connected mode never silently falls back to demo records. Projects now support
-authority-scoped officer edits, milestones, private/public updates and budgets,
-public HTTPS document links, following and transactional notifications. Resident
-and officer listings use server-side search, sorting and pagination. Project image
-uploads and feedback remain deferred. Announcements support drafts, publication, ward/GN division targeting and recipient notifications. Their feed persists comments, reactions and saved updates. Department edits and authority administrator account management are connected. Proposals and consultations are not connected yet.
-
-Read [BACKEND_SETUP.md](BACKEND_SETUP.md) to apply all four migrations, provision a
-staging authority/officer, run the database tests, and verify deployment.
-Read [ROADMAP.md](ROADMAP.md) for remaining frontend/backend and release work.
-
-## Quality checks
-
-The GitHub Actions workflow in `.github/workflows/flutter.yml` runs on pushes,
-pull requests, and manual dispatches. It uses Flutter 3.32.8, installs the
-committed dependency lockfile, and checks formatting, analysis (including info
-lints), and all tests. Keep the CI SDK version aligned with the local baseline.
-The workflow needs no project secrets. Its first hosted run occurs after push.
-
-To reproduce the CI checks locally:
-
-```bash
+```sh
 flutter pub get --enforce-lockfile
 dart format --output=none --set-exit-if-changed lib test
 flutter analyze --no-pub --fatal-infos
 flutter test --no-pub
 ```
 
+Database checks require Node.js (CI uses Node 22) and an ephemeral PostgreSQL runtime:
 
-After installing Flutter, run:
-
-```bash
-dart format --set-exit-if-changed lib test
-flutter analyze
-flutter test
-flutter build apk --debug
+```sh
+npm install --prefix .dart_tool/sql-validation --no-audit --no-fund --ignore-scripts @electric-sql/pglite@0.5.8
+node tool/test_report_backend.mjs
+node tool/test_project_backend.mjs
+node tool/test_announcement_backend.mjs
+node tool/test_officer_backend.mjs
 ```
 
-## Screenshots
+These checks run locally without a live Supabase project. The [GitHub Actions workflow](.github/workflows/flutter.yml) runs Flutter and database checks on pushes and pull requests. Live Auth callbacks, Storage HTTP uploads, multiple device sessions and accessibility still need staging/device verification.
 
-Add screenshots here after running the app on an Android emulator, iOS simulator, browser, or physical device.
+## Builds
 
-## Map attribution
+For a demo build:
 
-The in-app map renders OpenStreetMap tiles and visibly attributes OpenStreetMap contributors. Use a production tile provider or respect the OpenStreetMap tile usage policy before a large public deployment.
+```sh
+flutter build apk --dart-define=AUTH_MODE=demo
+flutter build web --dart-define=AUTH_MODE=demo
+```
+
+Connected builds require the Supabase defines above. Release signing, hosting, privacy disclosures, operational ownership and rollback are tracked in the roadmap.
+
+## Development guides
+
+- [ROADMAP.md](ROADMAP.md): delivery status and remaining work
+- [BACKEND_SETUP.md](BACKEND_SETUP.md): migrations, authority provisioning, permissions and staging checks
+- [AUTH_SETUP.md](AUTH_SETUP.md): authentication modes, callback configuration and live verification
+- [TODO.md](TODO.md): implementation checklist
+
+When contributing, keep changes focused on a roadmap task, run the relevant checks and describe behavior, validation and deployment requirements in the pull request.
+
+## Maps
+
+The app displays attribution to OpenStreetMap contributors. Choose a suitable tile provider for deployment and review the [OpenStreetMap tile usage policy](https://operations.osmfoundation.org/policies/tiles/) before using the public tile service at scale.
