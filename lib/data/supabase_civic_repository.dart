@@ -6,6 +6,7 @@ import 'civic_repository.dart';
 import 'report_codec.dart';
 import 'project_codec.dart';
 import 'announcement_codec.dart';
+import 'participation_codec.dart';
 
 /// Connected release: profiles, reports, projects, evidence, and notifications.
 /// Unsupported civic modules never fall back to in-memory writes.
@@ -15,6 +16,43 @@ class SupabaseCivicRepository extends CivicRepository {
   SupabaseClient get client => _client ?? Supabase.instance.client;
   @override
   bool get isPersistent => true;
+
+  @override
+  String projectAssetUrl(String path) =>
+      client.storage.from('project-public').getPublicUrl(path);
+
+  @override
+  Future<String> uploadProjectAsset(
+    String projectId,
+    String authorityId,
+    String name,
+    Uint8List bytes,
+  ) => _perform(() async {
+    final user = client.auth.currentUser;
+    if (user == null) {
+      throw const CivicFailure('Sign in to upload public project files.');
+    }
+    final extension = name.split('.').last.toLowerCase();
+    final type = switch (extension) {
+      'jpg' || 'jpeg' => 'image/jpeg',
+      'png' => 'image/png',
+      'webp' => 'image/webp',
+      'pdf' => 'application/pdf',
+      _ => null,
+    };
+    if (type == null || bytes.isEmpty || bytes.length > 10 * 1024 * 1024) {
+      throw const CivicFailure(
+        'Choose a JPG, PNG, WebP, or PDF file of at most 10 MB.',
+      );
+    }
+    final safeName = name.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+    final path =
+        '${user.id}/$authorityId/$projectId/${DateTime.now().microsecondsSinceEpoch}-$safeName';
+    await client.storage
+        .from('project-public')
+        .uploadBinary(path, bytes, fileOptions: FileOptions(contentType: type));
+    return path;
+  });
 
   @override
   Future<AppUser> manageUser(AppUser user, AppUser expected) =>
@@ -44,7 +82,7 @@ class SupabaseCivicRepository extends CivicRepository {
         '23505' =>
           'This request was already saved. Refresh to see the latest version.',
         '23503' =>
-          'This department still owns reports, projects or announcements. Reassign those records before removal.',
+          'This department still owns civic records. Reassign those records before removal.',
         '22023' => 'Check the required fields and try again.',
         _ => 'Could not save or load civic data. Please try again.',
       });
@@ -95,6 +133,14 @@ class SupabaseCivicRepository extends CivicRepository {
     final data = Json.from(await client.rpc('civic_bootstrap') as Map);
     final projectPage = await listProjects();
     final announcementPage = await listAnnouncements();
+    final participation = Json.from(
+      await client.rpc('civic_participation') as Map,
+    );
+    final users = objects(data['users']).map(userFromJson).toList();
+    final ownUser = users.where((u) => u.id == client.auth.currentUser?.id);
+    final analytics = ownUser.any((u) => u.isOfficer && u.onboardingComplete)
+        ? Json.from(await client.rpc('civic_analytics') as Map)
+        : null;
     return InitialCivicData(
       authorities: objects(data['authorities'])
           .map(
@@ -119,7 +165,8 @@ class SupabaseCivicRepository extends CivicRepository {
             ),
           )
           .toList(),
-      users: objects(data['users']).map(userFromJson).toList(),
+      users: users,
+      analytics: analytics,
       reports: objects(data['reports']).map(reportFromJson).toList(),
       notifications: objects(
         data['notifications'],
@@ -128,10 +175,141 @@ class SupabaseCivicRepository extends CivicRepository {
       announcements: announcementPage.announcements,
       feedItems: announcementPage.feedItems,
       announcementTotal: announcementPage.total,
-      proposals: const [],
-      consultations: const [],
+      proposals: objects(
+        participation['proposals'],
+      ).map(proposalFromJson).toList(),
+      consultations: objects(
+        participation['consultations'],
+      ).map(consultationFromJson).toList(),
     );
   });
+
+  @override
+  Future<List<Json>> auditEvents({int? beforeId}) => _perform(
+    () async => objects(
+      await client.rpc('civic_audit_events', params: {'before_id': beforeId}),
+    ),
+  );
+
+  @override
+  Future<Project> commentOnProject(Project project, CivicComment comment) =>
+      _perform(
+        () async => projectFromJson(
+          Json.from(
+            await client.rpc(
+                  'civic_project_comment',
+                  params: {
+                    'project_id': project.id,
+                    'comment_id': comment.id,
+                    'message': comment.message,
+                  },
+                )
+                as Map,
+          ),
+        ),
+      );
+
+  @override
+  Future<Proposal> createProposal(Proposal proposal) => _perform(
+    () async => proposalFromJson(
+      Json.from(
+        await client.rpc(
+              'civic_create_proposal',
+              params: {'payload': proposalToJson(proposal)},
+            )
+            as Map,
+      ),
+    ),
+  );
+
+  @override
+  Future<Proposal> setProposalPreference(
+    Proposal proposal,
+    String userId, {
+    bool? supported,
+    bool? following,
+  }) => _perform(
+    () async => proposalFromJson(
+      Json.from(
+        await client.rpc(
+              'civic_proposal_preference',
+              params: {
+                'proposal_id': proposal.id,
+                'supported': supported,
+                'following': following,
+              },
+            )
+            as Map,
+      ),
+    ),
+  );
+
+  @override
+  Future<Proposal> commentOnProposal(Proposal proposal, CivicComment comment) =>
+      _perform(
+        () async => proposalFromJson(
+          Json.from(
+            await client.rpc(
+                  'civic_proposal_comment',
+                  params: {
+                    'proposal_id': proposal.id,
+                    'comment_id': comment.id,
+                    'message': comment.message,
+                  },
+                )
+                as Map,
+          ),
+        ),
+      );
+
+  @override
+  Future<Proposal> reviewProposal(Proposal proposal, ProposalStatus status) =>
+      _perform(
+        () async => proposalFromJson(
+          Json.from(
+            await client.rpc(
+                  'civic_review_proposal',
+                  params: {
+                    'proposal_id': proposal.id,
+                    'next_status': status.name,
+                    'expected_revision': proposal.revision,
+                  },
+                )
+                as Map,
+          ),
+        ),
+      );
+
+  @override
+  Future<Consultation> createConsultation(Consultation consultation) =>
+      _perform(
+        () async => consultationFromJson(
+          Json.from(
+            await client.rpc(
+                  'civic_create_consultation',
+                  params: {'payload': consultationToJson(consultation)},
+                )
+                as Map,
+          ),
+        ),
+      );
+
+  @override
+  Future<Consultation> answerConsultation(
+    Consultation consultation,
+    String userId,
+    Map<String, String> answers,
+  ) => _perform(
+    () async => consultationFromJson(
+      Json.from(
+        await client.rpc(
+              'civic_answer_consultation',
+              params: {'consultation_id': consultation.id, 'answers': answers},
+            )
+            as Map,
+      ),
+    ),
+  );
 
   @override
   Future<CivicChanges> saveChanges(CivicChanges changes) => _perform(() async {

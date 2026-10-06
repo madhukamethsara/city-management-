@@ -473,7 +473,9 @@ class ProjectDetailScreen extends StatefulWidget {
 
 class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   final _commentController = TextEditingController();
-  final _comments = <CivicComment>[];
+  bool _postingComment = false;
+  String? _commentRequest;
+  String? _commentAttempt;
   Future<void>? _load;
   int? _dataRevision;
 
@@ -581,26 +583,64 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                       color: AppColors.mint,
                       borderRadius: BorderRadius.circular(13),
                     ),
-                    child: Row(
-                      children: <Widget>[
-                        const Icon(
-                          Icons.image_outlined,
-                          color: AppColors.deepGreen,
-                        ),
-                        const SizedBox(width: 7),
-                        Expanded(
-                          child: Text(
-                            project.imageLabels[index],
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
+                    child: controller.usesPersistentData
+                        ? InkWell(
+                            onTap: () => showDialog<void>(
+                              context: context,
+                              builder: (_) => Dialog(
+                                child: SizedBox(
+                                  height: 480,
+                                  child: InteractiveViewer(
+                                    child: Image.network(
+                                      controller.projectAssetUrl(
+                                            project.imageLabels[index],
+                                          ) ??
+                                          '',
+                                      fit: BoxFit.contain,
+                                      errorBuilder:
+                                          (context, error, stackTrace) =>
+                                              const Center(
+                                                child: Text(
+                                                  'Could not load image.',
+                                                ),
+                                              ),
+                                    ),
+                                  ),
+                                ),
+                              ),
                             ),
+                            child: Image.network(
+                              controller.projectAssetUrl(
+                                    project.imageLabels[index],
+                                  ) ??
+                                  '',
+                              fit: BoxFit.cover,
+                              semanticLabel:
+                                  'Public project image ${index + 1}',
+                              errorBuilder: (context, error, stackTrace) =>
+                                  const Icon(Icons.broken_image_outlined),
+                            ),
+                          )
+                        : Row(
+                            children: <Widget>[
+                              const Icon(
+                                Icons.image_outlined,
+                                color: AppColors.deepGreen,
+                              ),
+                              const SizedBox(width: 7),
+                              Expanded(
+                                child: Text(
+                                  project.imageLabels[index],
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                      ],
-                    ),
                   ),
                 ),
               ),
@@ -742,41 +782,51 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 ),
               ),
             const SizedBox(height: 24),
-            if (!controller.usesPersistentData) ...[
+            ...[
               const SectionTitle(title: 'Citizen feedback'),
               const SizedBox(height: 10),
               _CommentComposer(
                 controller: _commentController,
-                onSend: () {
+                onSend: () async {
+                  if (_postingComment) return;
                   if (!controller.canParticipate) {
                     showSignInPrompt(context);
                     return;
                   }
                   if (_commentController.text.trim().isEmpty) return;
-                  setState(() {
-                    _comments.add(
-                      CivicComment(
-                        id: 'comment-${DateTime.now().microsecondsSinceEpoch}',
-                        author: controller.currentUser!.isVerified
-                            ? 'Verified Resident · ${controller.currentUser!.ward}'
-                            : 'Resident',
-                        message: _commentController.text.trim(),
-                        createdAt: DateTime.now(),
-                        isVerified: controller.currentUser!.isVerified,
-                      ),
-                    );
+                  _commentRequest ??=
+                      'pjc-${DateTime.now().microsecondsSinceEpoch}';
+                  _commentAttempt ??= _commentController.text.trim();
+                  setState(() => _postingComment = true);
+                  final success = await saveCivicAction(
+                    context,
+                    () => controller.commentOnProject(
+                      project.id,
+                      _commentAttempt!,
+                      requestId: _commentRequest,
+                    ),
+                  );
+                  if (!mounted) return;
+                  setState(() => _postingComment = false);
+                  if (success) {
+                    _commentRequest = null;
+                    _commentAttempt = null;
                     _commentController.clear();
-                  });
+                  }
                 },
               ),
               const SizedBox(height: 12),
-              if (_comments.isEmpty)
+              if (_commentAttempt != null && !_postingComment)
+                const Text('Retry sends the original comment.'),
+              if (project.comments.isEmpty)
                 const Text(
                   'Be the first to add respectful, project-related feedback.',
                   style: TextStyle(color: AppColors.muted),
                 )
               else
-                ..._comments.map((comment) => _CommentCard(comment: comment)),
+                ...project.comments.map(
+                  (comment) => _CommentCard(comment: comment),
+                ),
             ],
             const SizedBox(height: 20),
           ],

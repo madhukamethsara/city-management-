@@ -344,6 +344,7 @@ class Project {
     required this.documents,
     required this.followerIds,
     this.imageLabels = const <String>[],
+    this.comments = const <CivicComment>[],
     this.contractor,
     this.projectManager,
     this.authorityId = '',
@@ -369,6 +370,7 @@ class Project {
   final List<PublicDocument> documents;
   final Set<String> followerIds;
   final List<String> imageLabels;
+  final List<CivicComment> comments;
   final String? contractor;
   final String? projectManager;
   final String authorityId;
@@ -395,6 +397,7 @@ class Project {
     List<PublicDocument>? documents,
     Set<String>? followerIds,
     List<String>? imageLabels,
+    List<CivicComment>? comments,
     String? contractor,
     String? projectManager,
     String? authorityId,
@@ -420,6 +423,7 @@ class Project {
       documents: documents ?? this.documents,
       followerIds: followerIds ?? this.followerIds,
       imageLabels: imageLabels ?? this.imageLabels,
+      comments: comments ?? this.comments,
       contractor: contractor ?? this.contractor,
       projectManager: projectManager ?? this.projectManager,
       authorityId: authorityId ?? this.authorityId,
@@ -673,6 +677,8 @@ class Proposal {
     required this.supporterIds,
     required this.comments,
     required this.followerIds,
+    this.supportCount,
+    this.revision = 0,
   });
 
   final String id;
@@ -688,8 +694,14 @@ class Proposal {
   final Set<String> supporterIds;
   final List<CivicComment> comments;
   final Set<String> followerIds;
+  final int? supportCount;
+  final int revision;
+  int get totalSupport => supportCount ?? supporterIds.length;
 
   Proposal copyWith({
+    ProposalStatus? status,
+    int? supportCount,
+    int? revision,
     List<String>? attachments,
     Set<String>? supporterIds,
     List<CivicComment>? comments,
@@ -701,13 +713,15 @@ class Proposal {
     category: category,
     locationLabel: locationLabel,
     expectedBenefit: expectedBenefit,
-    status: status,
+    status: status ?? this.status,
     author: author,
     createdAt: createdAt,
     attachments: attachments ?? this.attachments,
     supporterIds: supporterIds ?? this.supporterIds,
     comments: comments ?? this.comments,
     followerIds: followerIds ?? this.followerIds,
+    supportCount: supportCount ?? this.supportCount,
+    revision: revision ?? this.revision,
   );
 }
 
@@ -735,6 +749,8 @@ class Consultation {
     required this.department,
     required this.questions,
     required this.respondedUserIds,
+    this.answers = const {},
+    this.responseCount,
   });
 
   final String id;
@@ -745,10 +761,18 @@ class Consultation {
   final String department;
   final List<ConsultationQuestion> questions;
   final Set<String> respondedUserIds;
+  final Map<String, Map<String, String>> answers;
+  final int? responseCount;
+  int get totalResponses => responseCount ?? respondedUserIds.length;
 
-  bool get isOpen => DateTime.now().isBefore(closingDate);
+  bool get isOpen =>
+      !DateTime.now().isBefore(openingDate) &&
+      DateTime.now().isBefore(closingDate);
 
-  Consultation copyWith({Set<String>? respondedUserIds}) => Consultation(
+  Consultation copyWith({
+    Set<String>? respondedUserIds,
+    Map<String, Map<String, String>>? answers,
+  }) => Consultation(
     id: id,
     title: title,
     description: description,
@@ -757,6 +781,8 @@ class Consultation {
     department: department,
     questions: questions,
     respondedUserIds: respondedUserIds ?? this.respondedUserIds,
+    answers: answers ?? this.answers,
+    responseCount: responseCount,
   );
 }
 

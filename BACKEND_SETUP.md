@@ -1,7 +1,7 @@
 # Connected reports, projects, announcements and feed
 
 Supabase mode now uses persistent civic data as well as authentication.
-Apply all five migrations in order before launching a configured app. Existing auth-only
+Apply all nine migrations in order before launching a configured app. Existing auth-only
 deployments must complete this setup; there is no automatic demo-data fallback.
 
 ## Configure a staging project
@@ -22,7 +22,13 @@ deployments must complete this setup; there is no automatic demo-data fallback.
    still edit existing departments. Creation retries reuse the form request ID;
    duplicate names within an authority are rejected. Removal requires the current
    department snapshot and is blocked by any report, project or announcement
-   referencing its name, including historical records and drafts.
+   referencing its name, including historical records and drafts. Then apply,
+   in order, `202610060001_participation.sql`, `202610060002_admin_observability.sql`
+   `202610060003_project_feedback.sql` and `202610060004_project_assets.sql`
+   from the same migrations directory.
+   These add civic participation, audit events, complete analytics and project
+   feedback and public image/PDF uploads. Consultation ownership also protects
+   departments from removal.
 3. Insert the local authorities and departments that the service actually
    supports. The fixture below is for staging only:
 
@@ -107,10 +113,14 @@ described in the existing backend test scripts. It uses an ephemeral database.
   apply on the server before returning each page of 25 projects.
 - Budget figures marked private and internal updates never appear in resident RPC
   responses. All active officer roles can manage their own authority's projects.
-- Public documents are HTTPS links supplied by the authority. Tapping a document
-  copies its link for opening in a browser. Binary document uploads, project image
-  uploads and persistent project feedback are deferred; local-only controls are
-  hidden in connected mode.
+- Public documents are HTTPS links supplied by the authority or uploaded PDFs.
+  Tapping a document copies its link for opening in a browser. Officers can upload
+  JPG/PNG/WebP images and PDF documents, up to 10 MB each. Projects support up to
+  ten images and twenty documents. These files use the public `project-public`
+  bucket; upload only content approved for public viewing. Report evidence stays
+  in its separate private bucket. Client updates/deletes are denied for public
+  assets. Schedule cleanup of old unreferenced uploads after a grace period.
+  Project feedback is persistent, authority-scoped and server-authored.
 - Following is idempotent and scoped to the signed-in user. Subscriber identities
   are never exposed to other users. Public update, status and progress changes
   create notifications for active followers in the same authority; private-only
@@ -140,8 +150,17 @@ described in the existing backend test scripts. It uses an ephemeral database.
   a conflict, close the form, refresh and reopen it. Scheduling, moderation,
   older-comment browsing and project-update feed entries remain follow-up work.
 
-Proposals and consultations remain demo features. Analytics uses loaded civic
-records; project progress includes the currently loaded project pages.
+Proposals, support/follow preferences, comments and officer review persist.
+Officer review changes notify active followers. Officers can publish consultations
+with text questions. The backend also accepts validated choice questions.
+Answers are private to their author; only aggregate response counts are shared.
+One response per resident is enforced on the server, and exact retries are safe.
+Creation and comment forms retain request IDs and original payloads after an
+uncertain result. Binary proposal attachments and project conversion remain deferred.
+Authority analytics is calculated on the server from all authority records,
+including projects beyond the first page. Use console refresh to update metrics.
+Authority/platform administrators can open Administration history under More civic
+services. Audit events use 50-record cursor pages and exclude private content.
 Unsupported routes show service availability,
 and unsupported writes fail explicitly.
 
@@ -176,6 +195,7 @@ node tool/test_report_backend.mjs
 node tool/test_project_backend.mjs
 node tool/test_announcement_backend.mjs
 node tool/test_officer_backend.mjs
+node tool/test_participation_backend.mjs
 ```
 
 The SQL test executes the actual migration against ephemeral PostgreSQL with
@@ -206,6 +226,17 @@ verify that only matching residents receive it and its notification. Comment,
 react and save as a resident, restart, and verify persistence. Test a second ward,
 a second authority, unpublication, retry after a lost response and concurrent edits.
 iOS compilation and device validation require macOS/Xcode.
+
+For participation, submit a proposal as a resident, support/follow/comment in a
+second same-authority session, and review it as an officer. Verify author identity,
+support totals, notification delivery and persistence after restart. Publish a
+consultation, answer every question as a resident, retry the identical response,
+and confirm changed/duplicate responses are rejected. Verify that another resident
+and officers cannot read private answers. Test closed/future consultations, inactive
+accounts, cross-authority access, concurrent review conflicts and missing answers.
+Add project feedback and reload it in a separate session. As an authority admin,
+inspect audit history and older pages; ordinary officers/residents must be denied.
+Create more than 25 projects and confirm analytics includes all of them after refresh.
 
 ## Release limits
 

@@ -338,7 +338,16 @@ class _ProposalsScreenState extends State<ProposalsScreen> {
         .where((item) => _filter == null || item.status == _filter)
         .toList();
     return Scaffold(
-      appBar: AppBar(title: const Text('Community proposals')),
+      appBar: AppBar(
+        title: const Text('Community proposals'),
+        actions: [
+          IconButton(
+            tooltip: 'Refresh proposals',
+            icon: const Icon(Icons.refresh),
+            onPressed: () => saveCivicAction(context, controller.refreshData),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
           if (!controller.canParticipate) {
@@ -353,8 +362,8 @@ class _ProposalsScreenState extends State<ProposalsScreen> {
         label: const Text('New proposal'),
       ),
       body: ResponsivePage(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: ListView(
+          padding: const EdgeInsets.only(bottom: 72),
           children: <Widget>[
             const PageHeader(
               icon: Icons.lightbulb_outline,
@@ -389,21 +398,18 @@ class _ProposalsScreenState extends State<ProposalsScreen> {
               ),
             ),
             const SizedBox(height: 14),
-            Expanded(
-              child: proposals.isEmpty
-                  ? const EmptyState(
-                      icon: Icons.lightbulb_outline,
-                      title: 'No proposals found',
-                      message:
-                          'Try another review status or create a new local-development idea.',
-                    )
-                  : ListView.separated(
-                      itemCount: proposals.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 10),
-                      itemBuilder: (context, index) =>
-                          _ProposalCard(proposal: proposals[index]),
-                    ),
-            ),
+            if (proposals.isEmpty)
+              const EmptyState(
+                icon: Icons.lightbulb_outline,
+                title: 'No proposals found',
+                message:
+                    'Try another review status or create a new local-development idea.',
+              ),
+            for (final proposal in proposals)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _ProposalCard(proposal: proposal),
+              ),
           ],
         ),
       ),
@@ -485,7 +491,7 @@ class _ProposalCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 4),
                   Text(
-                    '${proposal.supporterIds.length} supporters',
+                    '${proposal.totalSupport} supporters',
                     style: const TextStyle(
                       color: AppColors.muted,
                       fontSize: 12,
@@ -560,6 +566,8 @@ class NewProposalScreen extends StatefulWidget {
 }
 
 class _NewProposalScreenState extends State<NewProposalScreen> {
+  final _requestId = 'pr-${DateTime.now().microsecondsSinceEpoch}';
+  ProposalDraft? _attempt;
   final _formKey = GlobalKey<FormState>();
   final _title = TextEditingController();
   final _description = TextEditingController();
@@ -589,17 +597,19 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
     if (!_formKey.currentState!.validate()) return;
     final controller = AppScope.of(context);
     if (_submitting) return;
+    _attempt ??= ProposalDraft(
+      title: _title.text.trim(),
+      description: _description.text.trim(),
+      category: _category,
+      locationLabel: _location.text.trim(),
+      expectedBenefit: _benefit.text.trim(),
+      attachmentNames: _attachments.map((file) => file.name).toList(),
+    );
     setState(() => _submitting = true);
     try {
       final proposal = await controller.submitProposal(
-        ProposalDraft(
-          title: _title.text.trim(),
-          description: _description.text.trim(),
-          category: _category,
-          locationLabel: _location.text.trim(),
-          expectedBenefit: _benefit.text.trim(),
-          attachmentNames: _attachments.map((file) => file.name).toList(),
-        ),
+        _attempt!,
+        requestId: _requestId,
       );
       if (!mounted) return;
       Navigator.pushReplacementNamed(context, '/proposals/${proposal.id}');
@@ -637,8 +647,13 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
                           'Explain a practical community benefit. This is a proposal, not a political vote.',
                     ),
                     const SizedBox(height: 20),
+                    if (_attempt != null)
+                      const Text(
+                        'Retry sends the original proposal details. Start a new proposal to change them.',
+                      ),
                     TextFormField(
                       controller: _title,
+                      readOnly: _attempt != null,
                       textCapitalization: TextCapitalization.sentences,
                       maxLength: 100,
                       decoration: const InputDecoration(
@@ -681,6 +696,7 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: _description,
+                      readOnly: _attempt != null,
                       minLines: 4,
                       maxLines: 7,
                       maxLength: 1200,
@@ -695,6 +711,7 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: _location,
+                      readOnly: _attempt != null,
                       textCapitalization: TextCapitalization.words,
                       decoration: const InputDecoration(
                         labelText: 'Proposed location',
@@ -707,6 +724,7 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: _benefit,
+                      readOnly: _attempt != null,
                       minLines: 3,
                       maxLines: 5,
                       maxLength: 700,
@@ -719,11 +737,12 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
                           : null,
                     ),
                     const SizedBox(height: 14),
-                    OutlinedButton.icon(
-                      onPressed: _pickImages,
-                      icon: const Icon(Icons.photo_library_outlined),
-                      label: const Text('Add optional images'),
-                    ),
+                    if (!AppScope.of(context).usesPersistentData)
+                      OutlinedButton.icon(
+                        onPressed: _pickImages,
+                        icon: const Icon(Icons.photo_library_outlined),
+                        label: const Text('Add optional images'),
+                      ),
                     if (_attachments.isNotEmpty) ...<Widget>[
                       const SizedBox(height: 9),
                       Wrap(
@@ -782,6 +801,9 @@ class ProposalDetailScreen extends StatefulWidget {
 }
 
 class _ProposalDetailScreenState extends State<ProposalDetailScreen> {
+  bool _posting = false;
+  String? _commentRequest;
+  String? _commentAttempt;
   final _comment = TextEditingController();
 
   @override
@@ -806,6 +828,11 @@ class _ProposalDetailScreenState extends State<ProposalDetailScreen> {
       appBar: AppBar(
         actions: <Widget>[
           IconButton(
+            tooltip: 'Refresh proposal',
+            icon: const Icon(Icons.refresh),
+            onPressed: () => saveCivicAction(context, controller.refreshData),
+          ),
+          IconButton(
             onPressed: () => _share(context, proposal),
             icon: const Icon(Icons.ios_share_outlined),
             tooltip: 'Share proposal',
@@ -816,6 +843,33 @@ class _ProposalDetailScreenState extends State<ProposalDetailScreen> {
         child: ListView(
           children: <Widget>[
             _ProposalStatusBadge(status: proposal.status),
+            if (controller.currentUser?.role.canManageAuthority ?? false)
+              DropdownButtonFormField<ProposalStatus>(
+                value:
+                    ProposalStatus.values
+                        .where((s) => s != ProposalStatus.convertedToProject)
+                        .contains(proposal.status)
+                    ? proposal.status
+                    : null,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: 'Officer review status',
+                ),
+                items: ProposalStatus.values
+                    .where((s) => s != ProposalStatus.convertedToProject)
+                    .map(
+                      (s) => DropdownMenuItem(value: s, child: Text(s.label)),
+                    )
+                    .toList(),
+                onChanged: (s) {
+                  if (s != null) {
+                    saveCivicAction(
+                      context,
+                      () => controller.reviewProposal(proposal.id, s),
+                    );
+                  }
+                },
+              ),
             const SizedBox(height: 12),
             Text(
               proposal.title,
@@ -930,7 +984,7 @@ class _ProposalDetailScreenState extends State<ProposalDetailScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              '${proposal.supporterIds.length} residents support this proposal · ${proposal.author}',
+              '${proposal.totalSupport} residents support this proposal · ${proposal.author}',
               style: const TextStyle(color: AppColors.muted, fontSize: 12),
             ),
             const SizedBox(height: 24),
@@ -941,6 +995,7 @@ class _ProposalDetailScreenState extends State<ProposalDetailScreen> {
                 Expanded(
                   child: TextField(
                     controller: _comment,
+                    readOnly: _commentAttempt != null,
                     minLines: 1,
                     maxLines: 3,
                     decoration: const InputDecoration(
@@ -950,23 +1005,32 @@ class _ProposalDetailScreenState extends State<ProposalDetailScreen> {
                 ),
                 const SizedBox(width: 8),
                 IconButton.filled(
-                  onPressed: () async {
-                    if (!controller.canParticipate) {
-                      return showSignInPrompt(context);
-                    }
-                    if (_comment.text.trim().isEmpty) return;
-                    if (!await saveCivicAction(
-                      context,
-                      () => controller.addProposalComment(
-                        proposal.id,
-                        _comment.text,
-                      ),
-                    )) {
-                      return;
-                    }
-                    if (!context.mounted) return;
-                    _comment.clear();
-                  },
+                  onPressed: _posting
+                      ? null
+                      : () async {
+                          if (!controller.canParticipate) {
+                            return showSignInPrompt(context);
+                          }
+                          if (_comment.text.trim().isEmpty) return;
+                          _commentRequest ??=
+                              'pc-${DateTime.now().microsecondsSinceEpoch}';
+                          _commentAttempt ??= _comment.text;
+                          setState(() => _posting = true);
+                          final success = await saveCivicAction(
+                            context,
+                            () => controller.addProposalComment(
+                              proposal.id,
+                              _commentAttempt!,
+                              requestId: _commentRequest,
+                            ),
+                          );
+                          if (!context.mounted) return;
+                          setState(() => _posting = false);
+                          if (!success) return;
+                          _commentRequest = null;
+                          _commentAttempt = null;
+                          _comment.clear();
+                        },
                   icon: const Icon(Icons.send_outlined),
                   tooltip: 'Post comment',
                 ),
@@ -1047,7 +1111,25 @@ class ConsultationsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = AppScope.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Public consultations')),
+      appBar: AppBar(
+        title: const Text('Public consultations'),
+        actions: [
+          IconButton(
+            tooltip: 'Refresh consultations',
+            icon: const Icon(Icons.refresh),
+            onPressed: () => saveCivicAction(context, controller.refreshData),
+          ),
+        ],
+      ),
+      floatingActionButton:
+          (controller.currentUser?.role.canManageAuthority ?? false)
+          ? FloatingActionButton.extended(
+              onPressed: () =>
+                  Navigator.pushNamed(context, '/consultations/new'),
+              icon: const Icon(Icons.add),
+              label: const Text('New consultation'),
+            )
+          : null,
       body: ResponsivePage(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1166,6 +1248,8 @@ class ConsultationDetailScreen extends StatefulWidget {
 }
 
 class _ConsultationDetailScreenState extends State<ConsultationDetailScreen> {
+  bool _submitting = false;
+  Map<String, String>? _attempt;
   final Map<String, String> _answers = <String, String>{};
   final Map<String, TextEditingController> _textControllers =
       <String, TextEditingController>{};
@@ -1191,7 +1275,16 @@ class _ConsultationDetailScreenState extends State<ConsultationDetailScreen> {
         controller.currentUser != null &&
         consultation.respondedUserIds.contains(controller.currentUser!.id);
     return Scaffold(
-      appBar: AppBar(title: const Text('Consultation')),
+      appBar: AppBar(
+        title: const Text('Consultation'),
+        actions: [
+          IconButton(
+            tooltip: 'Refresh consultation',
+            icon: const Icon(Icons.refresh),
+            onPressed: () => saveCivicAction(context, controller.refreshData),
+          ),
+        ],
+      ),
       body: ResponsivePage(
         child: ListView(
           children: <Widget>[
@@ -1266,10 +1359,12 @@ class _ConsultationDetailScreenState extends State<ConsultationDetailScreen> {
                 ),
               )
             else ...<Widget>[
+              if (_attempt != null)
+                const Text('Retry sends your original answers.'),
               ...consultation.questions.map(_questionCard),
               const SizedBox(height: 14),
               FilledButton(
-                onPressed: () => _submit(consultation),
+                onPressed: _submitting ? null : () => _submit(consultation),
                 child: const Text('Submit response'),
               ),
             ],
@@ -1327,6 +1422,7 @@ class _ConsultationDetailScreenState extends State<ConsultationDetailScreen> {
   }
 
   Future<void> _submit(Consultation consultation) async {
+    if (_submitting) return;
     final missing = consultation.questions
         .where((question) => (_answers[question.id] ?? '').trim().isEmpty)
         .toList();
@@ -1348,13 +1444,18 @@ class _ConsultationDetailScreenState extends State<ConsultationDetailScreen> {
       );
       return;
     }
-    if (!await saveCivicAction(
+    _attempt ??= Map.from(_answers);
+    setState(() => _submitting = true);
+    final success = await saveCivicAction(
       context,
-      () => controller.submitConsultationResponse(consultation.id),
-    )) {
-      return;
-    }
+      () => controller.submitConsultationResponse(
+        consultation.id,
+        answers: _attempt!,
+      ),
+    );
     if (!mounted) return;
+    setState(() => _submitting = false);
+    if (!success) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Your response was submitted. Thank you.')),
     );

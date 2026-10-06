@@ -63,3 +63,5 @@ jobs:
         run: node tool/test_announcement_backend.mjs
       - name: Test officer permissions and department lifecycle
         run: node tool/test_officer_backend.mjs
+      - name: Test civic participation and answer privacy
+        run: node tool/test_participation_backend.mjs

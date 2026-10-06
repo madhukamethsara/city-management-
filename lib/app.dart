@@ -1,5 +1,7 @@
 import 'widgets/save_civic_action.dart';
 import 'package:flutter/material.dart';
+import 'features/community/consultation_editor.dart';
+import 'features/admin/audit_screen.dart';
 
 import 'core/theme/app_theme.dart';
 import 'features/admin/admin_screens.dart';
@@ -113,10 +115,16 @@ Route<dynamic> _routeFor(RouteSettings settings, AppController controller) {
         '/feed',
         '/announcements',
         '/admin/announcements',
+        '/admin/audit',
+        '/proposals',
+        '/proposals/new',
+        '/consultations',
       }.contains(route) &&
       !route.startsWith('/reports/') &&
       !route.startsWith('/projects/') &&
-      !route.startsWith('/announcements/')) {
+      !route.startsWith('/announcements/') &&
+      !route.startsWith('/proposals/') &&
+      !route.startsWith('/consultations/')) {
     return _page(
       settings,
       Scaffold(
@@ -136,6 +144,7 @@ Route<dynamic> _routeFor(RouteSettings settings, AppController controller) {
     );
   }
 
+  if (route == '/admin/audit') return _page(settings, const AuditScreen());
   if (route.startsWith('/admin')) {
     if (!controller.isOfficer) {
       return _page(settings, const AccessDeniedScreen());
@@ -178,6 +187,9 @@ Route<dynamic> _routeFor(RouteSettings settings, AppController controller) {
     return _page(settings, const AnnouncementsScreen());
   }
   if (route == '/proposals') return _page(settings, const ProposalsScreen());
+  if (route == '/consultations/new') {
+    return _page(settings, const ConsultationEditor());
+  }
   if (route == '/proposals/new') {
     return _page(settings, const NewProposalScreen());
   }

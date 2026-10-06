@@ -4,6 +4,7 @@ import '../community/announcement_controls.dart';
 import '../../widgets/save_civic_action.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:file_selector/file_selector.dart' as files;
 
 import '../../core/theme/app_theme.dart';
 import '../../models/domain_models.dart';
@@ -108,6 +109,25 @@ class _AdminShellState extends State<AdminShell> {
             _ => 'Officer cases',
           }),
           actions: [
+            PopupMenuButton<String>(
+              tooltip: 'More civic services',
+              onSelected: (route) => Navigator.pushNamed(context, route),
+              itemBuilder: (_) => [
+                const PopupMenuItem(
+                  value: '/proposals',
+                  child: Text('Community proposals'),
+                ),
+                const PopupMenuItem(
+                  value: '/consultations',
+                  child: Text('Public consultations'),
+                ),
+                if (controller.canManageUsers)
+                  const PopupMenuItem(
+                    value: '/admin/audit',
+                    child: Text('Administration history'),
+                  ),
+              ],
+            ),
             IconButton(
               tooltip: 'Refresh data',
               icon: const Icon(Icons.refresh),
@@ -1474,6 +1494,8 @@ class _ProjectEditorState extends State<_ProjectEditor> {
   final _documentUrl = TextEditingController();
   final _picker = ImagePicker();
   final List<XFile> _images = [];
+  final Map<String, String> _uploadedImages = {};
+  Project? _saveAttempt;
   final _eventTime = DateTime.now();
   final List<ProjectMilestone> _milestones = [];
   final List<PublicDocument> _documents = [];
@@ -1559,6 +1581,42 @@ class _ProjectEditorState extends State<_ProjectEditor> {
     if (mounted && images.isNotEmpty) setState(() => _images.addAll(images));
   }
 
+  Future<void> _addDocument() async {
+    final file = await files.openFile(
+      acceptedTypeGroups: const [
+        files.XTypeGroup(
+          label: 'PDF documents',
+          extensions: ['pdf'],
+          mimeTypes: ['application/pdf'],
+          uniformTypeIdentifiers: ['com.adobe.pdf'],
+        ),
+      ],
+    );
+    if (file == null || !mounted) return;
+    final controller = AppScope.of(context);
+    setState(() => _saving = true);
+    PublicDocument? document;
+    final success = await saveCivicAction(context, () async {
+      final bytes = await file.readAsBytes();
+      final path = await controller.uploadProjectAsset(
+        _base!.id,
+        file.name,
+        bytes,
+      );
+      document = PublicDocument(
+        name: file.name,
+        kind: 'PDF',
+        sizeLabel: '${(bytes.length / 1024).ceil()} KB',
+        url: controller.projectAssetUrl(path),
+      );
+    });
+    if (!mounted) return;
+    setState(() {
+      _saving = false;
+      if (success) _documents.add(document!);
+    });
+  }
+
   Future<void> _pickDate(
     DateTime current,
     ValueChanged<DateTime> update,
@@ -1588,6 +1646,12 @@ class _ProjectEditorState extends State<_ProjectEditor> {
 
   Future<void> _save() async {
     if (_saving || !_formKey.currentState!.validate()) return;
+    if (_base!.imageLabels.length + _images.length > 10) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('A project can have at most 10 images.')),
+      );
+      return;
+    }
     if (_completionDate.isBefore(_startDate)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -1659,10 +1723,24 @@ class _ProjectEditorState extends State<_ProjectEditor> {
       ],
     );
     setState(() => _saving = true);
-    final saved = await saveCivicAction(
-      context,
-      () => controller.saveProject(project),
-    );
+    final saved = await saveCivicAction(context, () async {
+      if (controller.usesPersistentData && _saveAttempt == null) {
+        final paths = <String>[..._base!.imageLabels];
+        for (final image in _images) {
+          final path =
+              _uploadedImages[image.path] ??
+              await controller.uploadProjectAsset(
+                _base!.id,
+                image.name,
+                await image.readAsBytes(),
+              );
+          _uploadedImages[image.path] = path;
+          paths.add(path);
+        }
+        _saveAttempt = project.copyWith(imageLabels: paths);
+      }
+      await controller.saveProject(_saveAttempt ?? project);
+    });
     if (!mounted) return;
     setState(() => _saving = false);
     if (saved) Navigator.pop(context);
@@ -1687,6 +1765,14 @@ class _ProjectEditorState extends State<_ProjectEditor> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (controller.usesPersistentData)
+                  const Text(
+                    'Project images and PDF documents are public. Upload only material approved for public viewing.',
+                  ),
+                if (_saveAttempt != null)
+                  const Text(
+                    'Retry keeps the original project details and uploaded files. Close and reopen to review a conflict.',
+                  ),
                 Text(
                   widget.project == null ? 'Create project' : 'Manage project',
                   style: const TextStyle(
@@ -1965,16 +2051,21 @@ class _ProjectEditorState extends State<_ProjectEditor> {
                         : null;
                   },
                 ),
-                if (!controller.usesPersistentData)
+                if (controller.usesPersistentData)
                   OutlinedButton.icon(
-                    onPressed: _addImages,
-                    icon: const Icon(Icons.add_photo_alternate_outlined),
-                    label: Text(
-                      _images.isEmpty
-                          ? 'Add project images'
-                          : '${_images.length} image(s) selected',
-                    ),
+                    onPressed: _addDocument,
+                    icon: const Icon(Icons.upload_file),
+                    label: const Text('Upload public PDF (up to 10 MB)'),
                   ),
+                OutlinedButton.icon(
+                  onPressed: _addImages,
+                  icon: const Icon(Icons.add_photo_alternate_outlined),
+                  label: Text(
+                    _images.isEmpty
+                        ? 'Add project images'
+                        : '${_images.length} image(s) selected',
+                  ),
+                ),
                 const SizedBox(height: 18),
                 FilledButton(
                   onPressed: _saving ? null : _save,
@@ -2861,12 +2952,14 @@ class AdminAnalyticsPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = AppScope.of(context);
     final reports = controller.reports;
-    final resolved = reports
-        .where((report) => report.status == ReportStatus.resolved)
-        .length;
-    final rate = reports.isEmpty
-        ? 0
-        : ((resolved / reports.length) * 100).round();
+    final analytics = controller.authorityAnalytics;
+    final received = analytics?['received'] as int? ?? reports.length;
+    final resolved =
+        analytics?['resolved'] as int? ??
+        reports
+            .where((report) => report.status == ReportStatus.resolved)
+            .length;
+    final rate = received == 0 ? 0 : ((resolved / received) * 100).round();
     final byCategory = <String, int>{};
     final byWard = <String, int>{};
     for (final report in reports) {
@@ -2878,6 +2971,12 @@ class AdminAnalyticsPanel extends StatelessWidget {
           ).firstMatch(report.locationLabel)?.group(0) ??
           'Other';
       byWard[ward] = (byWard[ward] ?? 0) + 1;
+    }
+    if (analytics != null) {
+      byCategory.clear();
+      byCategory.addAll(Map<String, int>.from(analytics['byCategory'] as Map));
+      byWard.clear();
+      byWard.addAll(Map<String, int>.from(analytics['byWard'] as Map));
     }
     return ResponsivePage(
       child: ListView(
@@ -2903,7 +3002,7 @@ class AdminAnalyticsPanel extends StatelessWidget {
                 children: <Widget>[
                   MetricTile(
                     label: 'Received',
-                    value: '${reports.length}',
+                    value: '$received',
                     icon: Icons.inbox_outlined,
                     color: const Color(0xFF2C6EAA),
                   ),
@@ -2973,11 +3072,13 @@ class AdminAnalyticsPanel extends StatelessWidget {
           _BarChartCard(
             title: 'Project progress (%)',
             values: <String, int>{
-              for (final project in controller.projects)
-                project.title.length > 14
-                        ? '${project.title.substring(0, 14)}…'
-                        : project.title:
-                    project.progress,
+              if (analytics != null)
+                for (final project in analytics['projectProgress'] as List)
+                  '${project['title']} (${project['id']})':
+                      project['progress'] as int,
+              if (analytics == null)
+                for (final project in controller.projects)
+                  '${project.title} (${project.id})': project.progress,
             },
             color: AppColors.warning,
           ),
