@@ -59,7 +59,13 @@ void main() {
         proposal.id,
         '  Please include a study room.  ',
       );
-      await app.submitConsultationResponse('c-walking');
+      await app.submitConsultationResponse(
+        'c-walking',
+        answers: {
+          for (final q in app.consultationById('c-walking')!.questions)
+            q.id: q.allowsLongText ? 'Safer paths.' : q.options.first,
+        },
+      );
       final notificationId = app.notifications.first.id;
       await app.markNotificationRead(notificationId);
       await app.markAllNotificationsRead();
@@ -217,7 +223,13 @@ void main() {
         throwsStateError,
       );
       await expectLater(
-        app.submitConsultationResponse('c-walking'),
+        app.submitConsultationResponse(
+          'c-walking',
+          answers: {
+            for (final q in consultation!.questions)
+              q.id: q.allowsLongText ? 'Safer paths.' : q.options.first,
+          },
+        ),
         throwsStateError,
       );
       await expectLater(
@@ -243,7 +255,7 @@ void main() {
         stored.consultations
             .singleWhere((item) => item.id == 'c-walking')
             .respondedUserIds,
-        consultation!.respondedUserIds,
+        consultation.respondedUserIds,
       );
       expect(stored.announcements.length, announcements);
     },

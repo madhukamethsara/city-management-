@@ -16,7 +16,7 @@ presence is not production completion. See ROADMAP.md for current delivery statu
 - [ ] Configure a Supabase project and verify live email delivery, callbacks, and session restoration (see AUTH_SETUP.md).
 - [x] Enforce active-account and role permissions for connected reports/projects.
 - [x] Persist profiles and onboarding details.
-- [ ] Distinguish officer, department-admin, and platform-admin permissions.
+- [x] Distinguish officer, department-admin, and platform-admin permissions.
 
 ## 3. Persistent core request workflow
 - [x] Define database tables with local-authority ownership.
@@ -28,15 +28,23 @@ presence is not production completion. See ROADMAP.md for current delivery statu
 
 ## 4. Remaining civic features
 - [x] Persist projects, milestones, budgets, public document links, and following.
-- [ ] Verify projects against staging; add binary document/image uploads and persistent project feedback.
+- [x] Persist project feedback with server-established authorship and retry IDs.
+- [x] Add public PDF document and project image uploads.
+- [ ] Verify projects, upload HTTP behavior and file picking against staging/devices.
 - [x] Persist announcements, geographic targeting, publication and recipient notifications.
 - [x] Persist announcement-feed comments, reactions and saves.
 - [ ] Verify targeted announcement publication and feed participation against staging.
-- [ ] Persist proposals, comments, reactions, and consultation answers.
-- [ ] Replace placeholder analytics with calculated data.
+- [x] Persist proposals, comments, support/follow preferences, and private consultation answers.
+- [x] Add officer proposal review and consultation publication.
+- [x] Calculate authority analytics on the server across all project pages.
+- [x] Record private administrator audit history with cursor pagination.
+- [ ] Verify participation, project feedback, audit history and analytics against staging.
+- [ ] Add proposal attachments, project conversion and aggregate consultation results.
+- [ ] Add authority transfers and officer assignment using unique IDs.
 - [ ] Complete Sinhala, Tamil, and English translations and accessibility checks.
 
 ## 5. Release readiness
+- [x] Compile Android APK and web demo release builds locally.
 - [ ] Handle validation and network failures for all data operations.
 - [ ] Test access isolation, core workflows, and supported devices.
 - [ ] Configure production environments, monitoring, backups, and release builds.

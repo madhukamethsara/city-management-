@@ -162,6 +162,7 @@ class AppController extends ChangeNotifier {
   }
 
   void _clearSessionData() {
+    _analytics = null;
     _users = [];
     _departments = [];
     _reports = [];
@@ -210,6 +211,7 @@ class AppController extends ChangeNotifier {
     _proposals = data.proposals;
     _consultations = data.consultations;
     _notifications = data.notifications;
+    _analytics = data.analytics;
     if (usesPersistentData && _currentUser != null && !isGuest) {
       final profile = _firstOrNull(_users, (u) => u.id == _currentUser!.id);
       if (profile == null || !profile.isActive) {
@@ -238,6 +240,26 @@ class AppController extends ChangeNotifier {
   Future<String?> reportPhotoUrl(String path) =>
       _repository.reportPhotoUrl(path);
 
+  String? projectAssetUrl(String path) => _repository.projectAssetUrl(path);
+  Future<String> uploadProjectAsset(
+    String projectId,
+    String name,
+    Uint8List bytes,
+  ) async {
+    final generation = _sessionGeneration;
+    if (!isOfficer || _currentUser?.isActive != true) {
+      throw const CivicFailure('Active officer account required.');
+    }
+    final path = await _repository.uploadProjectAsset(
+      projectId,
+      _currentUser!.localAuthorityId,
+      name,
+      bytes,
+    );
+    _checkSession(generation);
+    return path;
+  }
+
   @override
   void dispose() {
     _disposed = true;
@@ -264,6 +286,18 @@ class AppController extends ChangeNotifier {
   List<Proposal> _proposals = <Proposal>[];
   List<Consultation> _consultations = <Consultation>[];
   List<AppNotification> _notifications = <AppNotification>[];
+  Map<String, dynamic>? _analytics;
+  Map<String, dynamic>? get authorityAnalytics => _analytics;
+
+  Future<List<Map<String, dynamic>>> auditEvents({int? beforeId}) async {
+    final generation = _sessionGeneration;
+    if (!canManageUsers) {
+      throw const CivicFailure('Administrator access required.');
+    }
+    final result = await _repository.auditEvents(beforeId: beforeId);
+    _checkSession(generation, isMutation: false);
+    return result;
+  }
 
   AppUser? get currentUser => _currentUser;
   bool get hasSession => _currentUser != null;
@@ -315,32 +349,47 @@ class AppController extends ChangeNotifier {
     return _reports.where((report) => report.ownerUserId == user.id).toList();
   }
 
-  DashboardMetrics get dashboardMetrics => DashboardMetrics(
-    newComplaints: _reports
-        .where((report) => report.status == ReportStatus.submitted)
-        .length,
-    assignedComplaints: _reports
-        .where((report) => report.status == ReportStatus.assigned)
-        .length,
-    overdueComplaints: _reports
-        .where(
-          (report) =>
-              report.priority == 'Urgent' &&
-              report.status != ReportStatus.resolved,
-        )
-        .length,
-    activeProjects: _projects
-        .where((project) => project.status == ProjectStatus.inProgress)
-        .length,
-    delayedProjects: _projects
-        .where((project) => project.status == ProjectStatus.delayed)
-        .length,
-    openConsultations: _consultations
-        .where((consultation) => consultation.isOpen)
-        .length,
-    citizenProposals: _proposals.length,
-    averageResolutionDays: averageResolutionDays,
-  );
+  DashboardMetrics get dashboardMetrics {
+    final a = _analytics;
+    if (a != null) {
+      return DashboardMetrics(
+        newComplaints: a['newComplaints'] as int,
+        assignedComplaints: a['assignedComplaints'] as int,
+        overdueComplaints: a['overdueComplaints'] as int,
+        activeProjects: a['activeProjects'] as int,
+        delayedProjects: a['delayedProjects'] as int,
+        openConsultations: a['openConsultations'] as int,
+        citizenProposals: a['citizenProposals'] as int,
+        averageResolutionDays: (a['averageResolutionDays'] as num).toDouble(),
+      );
+    }
+    return DashboardMetrics(
+      newComplaints: _reports
+          .where((report) => report.status == ReportStatus.submitted)
+          .length,
+      assignedComplaints: _reports
+          .where((report) => report.status == ReportStatus.assigned)
+          .length,
+      overdueComplaints: _reports
+          .where(
+            (report) =>
+                report.priority == 'Urgent' &&
+                report.status != ReportStatus.resolved,
+          )
+          .length,
+      activeProjects: _projects
+          .where((project) => project.status == ProjectStatus.inProgress)
+          .length,
+      delayedProjects: _projects
+          .where((project) => project.status == ProjectStatus.delayed)
+          .length,
+      openConsultations: _consultations
+          .where((consultation) => consultation.isOpen)
+          .length,
+      citizenProposals: _proposals.length,
+      averageResolutionDays: averageResolutionDays,
+    );
+  }
 
   double get averageResolutionDays {
     final resolved = _reports.where((r) => r.status == ReportStatus.resolved);
@@ -392,6 +441,7 @@ class AppController extends ChangeNotifier {
         password != (_demoPasswords[match.id] ?? 'demo12345')) {
       throw const AuthenticationFailure('Email or password is incorrect.');
     }
+    if (_currentUser?.id != match.id) _sessionGeneration++;
     _currentUser = match;
     notifyListeners();
   }
@@ -443,9 +493,9 @@ class AppController extends ChangeNotifier {
   }
 
   void continueAsGuest() {
+    _sessionGeneration++;
     if (usesPersistentData) {
       if (_auth?.currentUser != null) return;
-      _sessionGeneration++;
       _clearSessionData();
     }
     _currentUser = const AppUser(
@@ -465,6 +515,7 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> signOut() async {
+    _sessionGeneration++;
     if (_auth != null && !isGuest) await _auth.signOut();
     _currentUser = null;
     await _sessionLoad;
@@ -881,14 +932,17 @@ class AppController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<Proposal> submitProposal(ProposalDraft draft) async {
+  Future<Proposal> submitProposal(
+    ProposalDraft draft, {
+    String? requestId,
+  }) async {
+    final generation = _sessionGeneration;
     final user = _currentUser;
     if (user == null || user.isGuest) {
       throw StateError('Sign in before submitting a proposal.');
     }
-    await Future<void>.delayed(const Duration(milliseconds: 400));
     final proposal = Proposal(
-      id: 'pr-${DateTime.now().microsecondsSinceEpoch}',
+      id: requestId ?? 'pr-${DateTime.now().microsecondsSinceEpoch}',
       title: draft.title,
       description: draft.description,
       category: draft.category,
@@ -902,40 +956,49 @@ class AppController extends ChangeNotifier {
       comments: const <CivicComment>[],
       followerIds: <String>{user.id},
     );
-    await _commit(CivicChanges(proposals: [proposal]));
+    final saved = await _repository.createProposal(proposal);
+    _checkSession(generation);
+    _proposals = _mergeRecords(_proposals, [saved], (p) => p.id);
     notifyListeners();
     return proposalById(proposal.id)!;
   }
 
   Future<void> toggleProposalSupport(String proposalId) async {
+    final generation = _sessionGeneration;
     final user = _currentUser;
     final proposal = proposalById(proposalId);
     if (user == null || user.isGuest || proposal == null) return;
-    final supporters = Set<String>.from(proposal.supporterIds);
-    supporters.contains(user.id)
-        ? supporters.remove(user.id)
-        : supporters.add(user.id);
-    await _commit(
-      CivicChanges(proposals: [proposal.copyWith(supporterIds: supporters)]),
+    final saved = await _repository.setProposalPreference(
+      proposal,
+      user.id,
+      supported: !proposal.supporterIds.contains(user.id),
     );
+    _checkSession(generation);
+    _proposals = _mergeRecords(_proposals, [saved], (p) => p.id);
     notifyListeners();
   }
 
   Future<void> toggleProposalFollow(String proposalId) async {
+    final generation = _sessionGeneration;
     final user = _currentUser;
     final proposal = proposalById(proposalId);
     if (user == null || user.isGuest || proposal == null) return;
-    final followers = Set<String>.from(proposal.followerIds);
-    followers.contains(user.id)
-        ? followers.remove(user.id)
-        : followers.add(user.id);
-    await _commit(
-      CivicChanges(proposals: [proposal.copyWith(followerIds: followers)]),
+    final saved = await _repository.setProposalPreference(
+      proposal,
+      user.id,
+      following: !proposal.followerIds.contains(user.id),
     );
+    _checkSession(generation);
+    _proposals = _mergeRecords(_proposals, [saved], (p) => p.id);
     notifyListeners();
   }
 
-  Future<void> addProposalComment(String proposalId, String message) async {
+  Future<void> addProposalComment(
+    String proposalId,
+    String message, {
+    String? requestId,
+  }) async {
+    final generation = _sessionGeneration;
     final user = _currentUser;
     final proposal = proposalById(proposalId);
     if (user == null ||
@@ -945,44 +1008,81 @@ class AppController extends ChangeNotifier {
       return;
     }
     final comment = CivicComment(
-      id: 'pc-${DateTime.now().microsecondsSinceEpoch}',
+      id: requestId ?? 'pc-${DateTime.now().microsecondsSinceEpoch}',
       author: user.isVerified ? 'Verified Resident · ${user.ward}' : 'Resident',
       message: message.trim(),
       createdAt: DateTime.now(),
       isVerified: user.isVerified,
     );
-    await _commit(
-      CivicChanges(
-        proposals: [
-          proposal.copyWith(
-            comments: <CivicComment>[...proposal.comments, comment],
-          ),
-        ],
-      ),
-    );
+    final saved = await _repository.commentOnProposal(proposal, comment);
+    _checkSession(generation);
+    _proposals = _mergeRecords(_proposals, [saved], (p) => p.id);
     notifyListeners();
   }
 
-  Future<void> submitConsultationResponse(String consultationId) async {
+  Future<void> submitConsultationResponse(
+    String consultationId, {
+    Map<String, String> answers = const {},
+  }) async {
+    final generation = _sessionGeneration;
     final user = _currentUser;
     final consultation = consultationById(consultationId);
     if (user == null || user.isGuest || consultation == null) return;
-    final responses = Set<String>.from(consultation.respondedUserIds)
-      ..add(user.id);
-    final updated = consultation.copyWith(respondedUserIds: responses);
-    final notifications = <AppNotification>[
-      AppNotification(
-        id: 'n-consult-${DateTime.now().microsecondsSinceEpoch}',
-        title: 'Thank you for your response',
-        message: 'Your response to ${consultation.title} was recorded.',
-        category: 'Consultation',
-        createdAt: DateTime.now(),
-        isRead: false,
-      ),
-    ];
-    await _commit(
-      CivicChanges(consultations: [updated], notifications: notifications),
+    if (!consultation.isOpen) {
+      throw const CivicFailure('This consultation is not accepting responses.');
+    }
+    {
+      if (answers.length != consultation.questions.length ||
+          consultation.questions.any(
+            (q) =>
+                (answers[q.id] ?? '').trim().isEmpty ||
+                (answers[q.id]?.length ?? 0) > 4000 ||
+                (!q.allowsLongText && !q.options.contains(answers[q.id])),
+          )) {
+        throw const CivicFailure(
+          'Answer every question using a valid option or text.',
+        );
+      }
+    }
+    if (consultation.respondedUserIds.contains(user.id)) {
+      final existing = consultation.answers[user.id];
+      if (existing != null &&
+          existing.length == answers.length &&
+          existing.entries.every((e) => answers[e.key] == e.value)) {
+        return;
+      }
+      throw const CivicFailure('You have already answered this consultation.');
+    }
+    final saved = await _repository.answerConsultation(
+      consultation,
+      user.id,
+      Map.from(answers),
     );
+    _checkSession(generation);
+    _consultations = _mergeRecords(_consultations, [saved], (c) => c.id);
+    notifyListeners();
+  }
+
+  Future<void> reviewProposal(String id, ProposalStatus status) async {
+    final generation = _sessionGeneration;
+    final proposal = proposalById(id);
+    if (!(_currentUser?.role.canManageAuthority ?? false) || proposal == null) {
+      throw const CivicFailure('Only officers can review proposals.');
+    }
+    final saved = await _repository.reviewProposal(proposal, status);
+    _checkSession(generation);
+    _proposals = _mergeRecords(_proposals, [saved], (p) => p.id);
+    notifyListeners();
+  }
+
+  Future<void> createConsultation(Consultation consultation) async {
+    final generation = _sessionGeneration;
+    if (!(_currentUser?.role.canManageAuthority ?? false)) {
+      throw const CivicFailure('Only officers can create consultations.');
+    }
+    final saved = await _repository.createConsultation(consultation);
+    _checkSession(generation);
+    _consultations = _mergeRecords(_consultations, [saved], (c) => c.id);
     notifyListeners();
   }
 
@@ -1043,6 +1143,41 @@ class AppController extends ChangeNotifier {
     ++_projectReadSequence;
     await _commit(CivicChanges(projects: [project]));
     ++_projectReadSequence;
+    notifyListeners();
+  }
+
+  Future<void> commentOnProject(
+    String projectId,
+    String message, {
+    String? requestId,
+  }) async {
+    final generation = _sessionGeneration;
+    final project = projectById(projectId);
+    final user = _currentUser;
+    if (project == null ||
+        user == null ||
+        user.isGuest ||
+        !user.isActive ||
+        message.trim().isEmpty ||
+        message.trim().length > 2000) {
+      throw const CivicFailure(
+        'Sign in and enter a comment of 1–2000 characters.',
+      );
+    }
+    ++_projectReadSequence;
+    final saved = await _repository.commentOnProject(
+      project,
+      CivicComment(
+        id: requestId ?? 'pjc-${DateTime.now().microsecondsSinceEpoch}',
+        author: user.fullName,
+        message: message.trim(),
+        createdAt: DateTime.now(),
+        isVerified: user.isVerified,
+      ),
+    );
+    _checkSession(generation);
+    ++_projectReadSequence;
+    _projects = _mergeRecords(_projects, [saved], (p) => p.id);
     notifyListeners();
   }
 

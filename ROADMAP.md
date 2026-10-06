@@ -31,9 +31,11 @@ See BACKEND_SETUP.md for deployment prerequisites and commands.
 - [ ] Apply the projects migration after the report migration in staging.
 - [ ] Verify officer creation -> resident follow -> officer update -> notification across real sessions.
 
-Project image uploads and persistent project feedback are still deferred; these demo
-controls are hidden in connected mode. Document binary uploads are also deferred;
-this delivery supports authority-provided public HTTPS document links.
+Persistent project feedback is implemented, with server authorship, authority isolation
+and retry IDs. Officers can upload public JPG/PNG/WebP images and PDF documents,
+up to 10 MB each, alongside authority-provided HTTPS document links. Uploads use
+immutable objects in the public project bucket; report evidence remains private.
+Storage HTTP uploads and native file-picking verification are pending staging/devices.
 
 ## Announcements and feed delivery - implemented locally
 
@@ -54,10 +56,16 @@ project-update feed entries and older-comment browsing remain follow-up work.
 
 ## Next - complete remaining civic services
 
-1. Proposals and consultations: persistent text answers and comments, one
-   participation per person, review workflow and supported attachments.
-2. Administration follow-up: audit history, authority transfers, department
-   lifecycle staging verification and server-side analytics across all project pages.
+1. Proposals and consultations: persistent proposals, support/follow preferences,
+   comments, officer review and consultation publication are implemented locally.
+   Text and choice answers persist privately with one response per person.
+   Live staging verification, proposal attachments, project conversion and
+   aggregate consultation results remain follow-up work. The officer editor
+   publishes text questions; choice questions can also be provisioned through RPC.
+   Participation lists/comments currently load in full; server pagination remains work.
+2. Administration follow-up: private audit history with cursor pagination and
+   server-side analytics across all project pages are implemented locally.
+   Authority transfers and department lifecycle staging verification remain.
    Existing department edits and authority-scoped role/activity management now
    persist through permission-checked RPCs. Resolution metrics use case history.
    Department creation/removal is implemented locally with authority-admin permissions,
@@ -66,6 +74,12 @@ project-update feed entries and older-comment browsing remain follow-up work.
    verify create -> edit -> reload -> remove across real administrator sessions.
 
 Deliver and test each module end to end before exposing it in connected mode.
+
+Apply the four 20261006 migrations in filename order after department lifecycle.
+Connected screens require these migrations; they do not fall back to demo data.
+Analytics represents the latest bootstrap/refresh snapshot. Audit history starts
+when its migration is applied and excludes contact details, answer text, private
+notes, evidence and budget amounts. Historical audit events are not backfilled.
 
 ## Usability and release readiness
 
@@ -78,7 +92,8 @@ Deliver and test each module end to end before exposing it in connected mode.
   realtime behavior without losing local edits.
 - Add upload retention cleanup, API abuse controls, observability, backup
   restore testing and separate staging/production release configuration.
-- Validate Android, iOS and web release builds, signing, privacy disclosures,
+- Android and web demo release builds pass locally. Validate iOS on macOS/Xcode,
+  connected production builds, release signing, privacy disclosures,
   operational ownership, deployment rollback and user support.
 
 No production deployment is implied by completion of the local implementation.

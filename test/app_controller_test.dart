@@ -68,7 +68,23 @@ void main() {
         );
         const consultationId = 'c-walking';
 
-        await controller.submitConsultationResponse(consultationId);
+        final answers = {
+          for (final q
+              in controller.consultationById(consultationId)!.questions)
+            q.id: q.allowsLongText
+                ? 'Safer footpaths near schools.'
+                : q.options.first,
+        };
+        await controller.submitConsultationResponse(
+          consultationId,
+          answers: answers,
+        );
+        expect(
+          controller
+              .consultationById(consultationId)!
+              .answers[controller.currentUser!.id],
+          answers,
+        );
 
         expect(
           controller

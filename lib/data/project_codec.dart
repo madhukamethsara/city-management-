@@ -5,6 +5,7 @@ Json projectToJson(Project p) => {
   'id': p.id,
   'authorityId': p.authorityId,
   'revision': p.revision,
+  'imageLabels': p.imageLabels,
   'title': p.title,
   'description': p.description,
   'category': p.category,
@@ -111,4 +112,15 @@ Project projectFromJson(Json d) => Project(
       )
       .toList(),
   followerIds: strings(d['followerIds']).toSet(),
+  comments: objects(d['comments'])
+      .map(
+        (c) => CivicComment(
+          id: c['id'] as String,
+          author: c['author'] as String,
+          message: c['message'] as String,
+          createdAt: DateTime.parse(c['createdAt'] as String),
+          isVerified: c['isVerified'] == true,
+        ),
+      )
+      .toList(),
 );

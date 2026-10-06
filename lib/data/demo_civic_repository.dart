@@ -57,6 +57,7 @@ class DemoCivicRepository extends CivicRepository {
             documents: List.unmodifiable(item.documents),
             followerIds: Set.unmodifiable(item.followerIds),
             imageLabels: List.unmodifiable(item.imageLabels),
+            comments: List.unmodifiable(item.comments),
           ),
         ),
       ),

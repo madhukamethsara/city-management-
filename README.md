@@ -15,9 +15,10 @@ The project targets Android, iOS and responsive web. It includes a full in-memor
 | Departments | Persistent edits; authority administrators can create departments and remove unused departments |
 | Account management | Authority-scoped role and active-state management with server permission checks |
 | Notifications | Recipient-specific in-app notifications and persistent read state |
-| Proposals and consultations | Demo only; connected workflows remain on the roadmap |
+| Proposals and consultations | Persistent proposals, support/follow actions, comments, officer review, consultations and private text/choice answers |
+| Administration history and analytics | Authority-scoped audit events and server-calculated metrics across all project pages |
 
-The interface includes an OpenStreetMap explorer, responsive navigation and officer case-management views. Project image uploads, binary document uploads and persistent project feedback remain deferred. Analytics uses available case data; server-side analytics across all pages remains follow-up work.
+The interface includes an OpenStreetMap explorer, responsive navigation and officer case-management views. Project feedback persists. Officers can upload public project images and PDF documents (up to 10 MB each). Connected analytics includes all authority records, refreshed through the console refresh action.
 
 ## Quick start
 
@@ -46,13 +47,17 @@ Demo data is seeded and held in memory. It resets when the app restarts. These a
 
 Follow [authentication setup](AUTH_SETUP.md) for email delivery, callback URLs and session configuration, then [backend setup](BACKEND_SETUP.md) for database provisioning and verification.
 
-Apply all five migrations in order before starting connected mode:
+Apply all nine migrations in order before starting connected mode:
 
 1. `supabase/migrations/202609290001_report_workflow.sql`
 2. `supabase/migrations/202609300001_project_workflow.sql`
 3. `supabase/migrations/202610020001_announcement_workflow.sql`
 4. `supabase/migrations/202610040001_officer_management.sql`
 5. `supabase/migrations/202610050001_department_lifecycle.sql`
+6. `supabase/migrations/202610060001_participation.sql`
+7. `supabase/migrations/202610060002_admin_observability.sql`
+8. `supabase/migrations/202610060003_project_feedback.sql`
+9. `supabase/migrations/202610060004_project_assets.sql`
 
 Provision actual authorities and departments, register staging users, and assign the initial officer/administrator roles as described in the backend guide. New accounts start as citizens. Server functions enforce authority and role permissions; connected mode does not fall back to demo records.
 
@@ -112,6 +117,7 @@ node tool/test_report_backend.mjs
 node tool/test_project_backend.mjs
 node tool/test_announcement_backend.mjs
 node tool/test_officer_backend.mjs
+node tool/test_participation_backend.mjs
 ```
 
 These checks run locally without a live Supabase project. The [GitHub Actions workflow](.github/workflows/flutter.yml) runs Flutter and database checks on pushes and pull requests. Live Auth callbacks, Storage HTTP uploads, multiple device sessions and accessibility still need staging/device verification.
@@ -126,6 +132,12 @@ flutter build web --dart-define=AUTH_MODE=demo
 ```
 
 Connected builds require the Supabase defines above. Release signing, hosting, privacy disclosures, operational ownership and rollback are tracked in the roadmap.
+
+Android and web demo release builds have been validated locally. The Android
+release configuration still uses the debug signing key and example application
+ID; configure the production identity and signing before distributing a store build.
+Gradle uses a 2 GB heap and two workers; Kotlin incremental compilation is disabled
+to avoid cross-drive cache failures on Windows.
 
 ## Development guides
 

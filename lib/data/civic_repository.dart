@@ -7,6 +7,101 @@ import '../models/domain_models.dart';
 abstract class CivicRepository {
   bool get isPersistent => false;
 
+  Future<String> uploadProjectAsset(
+    String projectId,
+    String authorityId,
+    String name,
+    Uint8List bytes,
+  ) async => name;
+  String? projectAssetUrl(String path) => null;
+
+  Future<List<Map<String, dynamic>>> auditEvents({int? beforeId}) async => [];
+
+  Future<Project> commentOnProject(
+    Project project,
+    CivicComment comment,
+  ) async => (await saveChanges(
+    CivicChanges(
+      projects: [
+        project.copyWith(
+          comments: [
+            ...project.comments.where((c) => c.id != comment.id),
+            comment,
+          ],
+        ),
+      ],
+    ),
+  )).projects.single;
+
+  Future<Proposal> createProposal(Proposal proposal) async =>
+      (await saveChanges(CivicChanges(proposals: [proposal]))).proposals.single;
+
+  Future<Proposal> setProposalPreference(
+    Proposal proposal,
+    String userId, {
+    bool? supported,
+    bool? following,
+  }) async {
+    final supporters = Set<String>.from(proposal.supporterIds);
+    final followers = Set<String>.from(proposal.followerIds);
+    if (supported != null) {
+      supported ? supporters.add(userId) : supporters.remove(userId);
+    }
+    if (following != null) {
+      following ? followers.add(userId) : followers.remove(userId);
+    }
+    return (await saveChanges(
+      CivicChanges(
+        proposals: [
+          proposal.copyWith(supporterIds: supporters, followerIds: followers),
+        ],
+      ),
+    )).proposals.single;
+  }
+
+  Future<Proposal> commentOnProposal(
+    Proposal proposal,
+    CivicComment comment,
+  ) async => (await saveChanges(
+    CivicChanges(
+      proposals: [
+        proposal.copyWith(
+          comments: [
+            ...proposal.comments.where((c) => c.id != comment.id),
+            comment,
+          ],
+        ),
+      ],
+    ),
+  )).proposals.single;
+
+  Future<Proposal> reviewProposal(
+    Proposal proposal,
+    ProposalStatus status,
+  ) async => (await saveChanges(
+    CivicChanges(proposals: [proposal.copyWith(status: status)]),
+  )).proposals.single;
+
+  Future<Consultation> createConsultation(Consultation consultation) async =>
+      (await saveChanges(
+        CivicChanges(consultations: [consultation]),
+      )).consultations.single;
+
+  Future<Consultation> answerConsultation(
+    Consultation consultation,
+    String userId,
+    Map<String, String> answers,
+  ) async => (await saveChanges(
+    CivicChanges(
+      consultations: [
+        consultation.copyWith(
+          respondedUserIds: {...consultation.respondedUserIds, userId},
+          answers: {...consultation.answers, userId: Map.unmodifiable(answers)},
+        ),
+      ],
+    ),
+  )).consultations.single;
+
   Future<Department> createDepartment(Department department) async =>
       (await saveChanges(
         CivicChanges(departments: [department]),
@@ -193,6 +288,7 @@ class InitialCivicData {
     required this.consultations,
     required this.notifications,
     this.announcementTotal = 0,
+    this.analytics,
   });
 
   final List<LocalAuthority> authorities;
@@ -206,6 +302,7 @@ class InitialCivicData {
   final List<Consultation> consultations;
   final List<AppNotification> notifications;
   final int announcementTotal;
+  final Map<String, dynamic>? analytics;
 }
 
 /// A batch of related civic records to save together.
