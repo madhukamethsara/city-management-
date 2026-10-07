@@ -7,6 +7,10 @@ import '../models/domain_models.dart';
 abstract class CivicRepository {
   bool get isPersistent => false;
 
+  /// Loads only the signed-in recipient's notifications in persistent adapters.
+  Future<List<AppNotification>> loadNotifications() async =>
+      (await loadInitialData()).notifications;
+
   Future<String> uploadProjectAsset(
     String projectId,
     String authorityId,

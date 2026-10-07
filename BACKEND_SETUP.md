@@ -1,7 +1,7 @@
 # Connected reports, projects, announcements and feed
 
 Supabase mode now uses persistent civic data as well as authentication.
-Apply all nine migrations in order before launching a configured app. Existing auth-only
+Apply all ten migrations in order before launching a configured app. Existing auth-only
 deployments must complete this setup; there is no automatic demo-data fallback.
 
 ## Configure a staging project
@@ -25,7 +25,8 @@ deployments must complete this setup; there is no automatic demo-data fallback.
    referencing its name, including historical records and drafts. Then apply,
    in order, `202610060001_participation.sql`, `202610060002_admin_observability.sql`
    `202610060003_project_feedback.sql` and `202610060004_project_assets.sql`
-   from the same migrations directory.
+   from the same migrations directory. Then apply
+   `202610070001_notification_refresh.sql` for the recipient-only refresh RPC.
    These add civic participation, audit events, complete analytics and project
    feedback and public image/PDF uploads. Consultation ownership also protects
    departments from removal.
@@ -217,7 +218,11 @@ navigation, screen readers, slow networks and failure/retry behavior.
 For projects, create a project as the officer with a private budget and internal
 update, then sign in as the resident in a separate session. Verify those private
 fields are absent, follow the project, and post a public update as the officer.
-Refresh resident notifications and open the project. Unfollow, change progress,
+Open resident notifications to fetch updates, then test the refresh button and
+pull-to-refresh, including an empty list. Confirm that a failed refresh keeps
+existing items and retry succeeds. Mark an item read during a slow refresh and
+confirm it stays read; switch accounts during loading and confirm the old
+response does not appear. Open the project. Unfollow, change progress,
 and confirm no new notification arrives. Check document links, a second authority,
 more than 25 projects, and a stale editor in a second officer session.
 For announcements, create an unpublished notice as an officer, then confirm that

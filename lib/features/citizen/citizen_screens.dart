@@ -707,117 +707,190 @@ class _FeedAction extends StatelessWidget {
   }
 }
 
-class NotificationsScreen extends StatelessWidget {
-  const NotificationsScreen({super.key});
+class NotificationsScreen extends StatefulWidget {
+  const NotificationsScreen({super.key, this.active = true});
+
+  final bool active;
+
+  @override
+  State<NotificationsScreen> createState() => _NotificationsScreenState();
+}
+
+class _NotificationsScreenState extends State<NotificationsScreen> {
+  String? _session;
+  bool _refreshing = false;
+  bool _failed = false;
+  int _generation = 0;
+
+  @override
+  void didUpdateWidget(NotificationsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.active && !oldWidget.active) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && widget.active) _refresh();
+      });
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final app = AppScope.of(context);
+    if (_session != app.sessionKey) {
+      _session = app.sessionKey;
+      ++_generation;
+      _refreshing = false;
+      _failed = false;
+      final generation = _generation;
+      if (app.canParticipate && widget.active) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && widget.active && generation == _generation) _refresh();
+        });
+      }
+    }
+  }
+
+  Future<void> _refresh() async {
+    if (_refreshing) return;
+    final app = AppScope.of(context);
+    final generation = _generation;
+    setState(() {
+      _refreshing = true;
+      _failed = false;
+    });
+    try {
+      await app.refreshNotifications();
+    } catch (_) {
+      if (mounted && generation == _generation) {
+        setState(() => _failed = true);
+      }
+    } finally {
+      if (mounted && generation == _generation) {
+        setState(() => _refreshing = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final controller = AppScope.of(context);
     return ResponsivePage(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          PageHeader(
-            icon: Icons.notifications_none_outlined,
-            title: 'Notifications',
-            subtitle:
-                'Updates about your reports, followed projects and local announcements.',
-            action: controller.unreadNotificationCount > 0
-                ? TextButton(
-                    onPressed: () async {
-                      await saveCivicAction(
-                        context,
-                        controller.markAllNotificationsRead,
-                      );
-                    },
-                    child: const Text('Mark all read'),
-                  )
-                : null,
-          ),
-          const SizedBox(height: 20),
-          Expanded(
-            child: controller.notifications.isEmpty
-                ? const EmptyState(
-                    icon: Icons.notifications_off_outlined,
-                    title: 'You are all caught up',
-                    message: 'New local updates will appear here.',
-                  )
-                : ListView.separated(
-                    itemCount: controller.notifications.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 8),
-                    itemBuilder: (context, index) {
-                      final notification = controller.notifications[index];
-                      return CivicCard(
-                        onTap: () async {
-                          if (!await saveCivicAction(
-                            context,
-                            () => controller.markNotificationRead(
-                              notification.id,
-                            ),
-                          )) {
-                            return;
-                          }
-                          if (!context.mounted) return;
-                          if (notification.route != null) {
-                            Navigator.pushNamed(context, notification.route!);
-                          }
-                        },
-                        child: Row(
+      child: RefreshIndicator(
+        onRefresh: _refresh,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: <Widget>[
+            PageHeader(
+              icon: Icons.notifications_none_outlined,
+              title: 'Notifications',
+              subtitle:
+                  'Updates about your reports, followed projects and local announcements.',
+              action: Wrap(
+                spacing: 8,
+                children: [
+                  IconButton(
+                    tooltip: 'Refresh notifications',
+                    onPressed: _refreshing || !controller.canParticipate
+                        ? null
+                        : _refresh,
+                    icon: const Icon(Icons.refresh),
+                  ),
+                  if (controller.unreadNotificationCount > 0)
+                    TextButton(
+                      onPressed: () async {
+                        await saveCivicAction(
+                          context,
+                          controller.markAllNotificationsRead,
+                        );
+                      },
+                      child: const Text('Mark all read'),
+                    ),
+                ],
+              ),
+            ),
+            if (_refreshing)
+              const LinearProgressIndicator(
+                semanticsLabel: 'Refreshing notifications',
+              ),
+            if (_failed)
+              TextButton.icon(
+                onPressed: _refresh,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Could not refresh notifications. Retry'),
+              ),
+            const SizedBox(height: 20),
+            if (controller.notifications.isEmpty)
+              const EmptyState(
+                icon: Icons.notifications_off_outlined,
+                title: 'You are all caught up',
+                message: 'New local updates will appear here.',
+              ),
+            for (final notification in controller.notifications)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: CivicCard(
+                  onTap: () async {
+                    if (!await saveCivicAction(
+                      context,
+                      () => controller.markNotificationRead(notification.id),
+                    )) {
+                      return;
+                    }
+                    if (!context.mounted) return;
+                    if (notification.route != null) {
+                      Navigator.pushNamed(context, notification.route!);
+                    }
+                  },
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Container(
+                        width: 11,
+                        height: 11,
+                        margin: const EdgeInsets.only(top: 5),
+                        decoration: BoxDecoration(
+                          color: notification.isRead
+                              ? Colors.transparent
+                              : AppColors.green,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: <Widget>[
-                            Container(
-                              width: 11,
-                              height: 11,
-                              margin: const EdgeInsets.only(top: 5),
-                              decoration: BoxDecoration(
-                                color: notification.isRead
-                                    ? Colors.transparent
-                                    : AppColors.green,
-                                shape: BoxShape.circle,
+                            Text(
+                              notification.title,
+                              style: TextStyle(
+                                fontWeight: notification.isRead
+                                    ? FontWeight.w700
+                                    : FontWeight.w900,
                               ),
                             ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: <Widget>[
-                                  Text(
-                                    notification.title,
-                                    style: TextStyle(
-                                      fontWeight: notification.isRead
-                                          ? FontWeight.w700
-                                          : FontWeight.w900,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    notification.message,
-                                    style: const TextStyle(
-                                      color: AppColors.muted,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    '${notification.category} · ${relativeTime(notification.createdAt)}',
-                                    style: const TextStyle(
-                                      color: AppColors.muted,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                            const SizedBox(height: 4),
+                            Text(
+                              notification.message,
+                              style: const TextStyle(color: AppColors.muted),
                             ),
-                            const Icon(
-                              Icons.chevron_right,
-                              color: AppColors.muted,
+                            const SizedBox(height: 6),
+                            Text(
+                              '${notification.category} · ${relativeTime(notification.createdAt)}',
+                              style: const TextStyle(
+                                color: AppColors.muted,
+                                fontSize: 12,
+                              ),
                             ),
                           ],
                         ),
-                      );
-                    },
+                      ),
+                      const Icon(Icons.chevron_right, color: AppColors.muted),
+                    ],
                   ),
-          ),
-        ],
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

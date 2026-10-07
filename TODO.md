@@ -24,6 +24,7 @@ presence is not production completion. See ROADMAP.md for current delivery statu
 - [x] Persist report submission, assignment, updates, and resident confirmation.
 - [x] Upload actual report attachment bytes with appropriate access permissions.
 - [x] Deliver notifications to their intended users and persist read state.
+- [x] Add notification refresh on opening, pull-to-refresh, a refresh button and retry with session isolation.
 - [ ] Verify citizen submission -> officer update -> resident notification across sessions.
 
 ## 4. Remaining civic features

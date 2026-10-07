@@ -18,6 +18,13 @@ class SupabaseCivicRepository extends CivicRepository {
   bool get isPersistent => true;
 
   @override
+  Future<List<AppNotification>> loadNotifications() => _perform(
+    () async => objects(
+      await client.rpc('civic_notifications'),
+    ).map(notificationFromJson).toList(),
+  );
+
+  @override
   String projectAssetUrl(String path) =>
       client.storage.from('project-public').getPublicUrl(path);
 

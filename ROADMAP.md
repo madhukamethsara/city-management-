@@ -77,6 +77,10 @@ Deliver and test each module end to end before exposing it in connected mode.
 
 Apply the four 20261006 migrations in filename order after department lifecycle.
 Connected screens require these migrations; they do not fall back to demo data.
+Then apply `202610070001_notification_refresh.sql` for notification refresh.
+The notification screen fetches on opening and provides pull-to-refresh, a
+refresh button and retry without reloading other civic data. Late responses are
+discarded after account changes; confirmed read state survives a stale snapshot.
 Analytics represents the latest bootstrap/refresh snapshot. Audit history starts
 when its migration is applied and excludes contact details, answer text, private
 notes, evidence and budget amounts. Historical audit events are not backfilled.
@@ -88,8 +92,9 @@ notes, evidence and budget amounts. Historical audit events are not backfilled.
   but does not translate every screen.
 - Audit every remaining screen at narrow widths, enlarged text, landscape,
   keyboard-open layouts, keyboard navigation and screen-reader use.
-- Add paginated data access, offline draft recovery and notification refresh/
-  realtime behavior without losing local edits.
+- Add paginated data access, offline draft recovery and notification realtime
+  behavior without losing local edits. Manual notification refresh is implemented;
+  live staging verification remains pending.
 - Add upload retention cleanup, API abuse controls, observability, backup
   restore testing and separate staging/production release configuration.
 - Android and web demo release builds pass locally. Validate iOS on macOS/Xcode,
