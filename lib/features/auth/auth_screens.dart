@@ -13,7 +13,16 @@ class WelcomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       body: DecoratedBox(
-        decoration: const BoxDecoration(gradient: AppColors.canvasGradient),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Theme.of(context).colorScheme.primaryContainer,
+              Theme.of(context).scaffoldBackgroundColor,
+            ],
+          ),
+        ),
         child: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -58,7 +67,18 @@ class _WelcomeHero extends StatelessWidget {
       padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(28),
-        gradient: AppColors.brandGradient,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color.lerp(
+              Theme.of(context).colorScheme.primary,
+              Colors.black,
+              0.35,
+            )!,
+            Theme.of(context).colorScheme.primary,
+          ],
+        ),
         boxShadow: const [
           BoxShadow(
             color: Color(0x26064E50),

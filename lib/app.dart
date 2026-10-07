@@ -16,10 +16,19 @@ import 'state/app_scope.dart';
 import 'widgets/app_widgets.dart';
 import 'widgets/civic_shell.dart';
 
-class SmartSabhaApp extends StatelessWidget {
+class SmartSabhaApp extends StatefulWidget {
   const SmartSabhaApp({super.key, required this.controller});
 
   final AppController controller;
+
+  @override
+  State<SmartSabhaApp> createState() => _SmartSabhaAppState();
+}
+
+class _SmartSabhaAppState extends State<SmartSabhaApp> {
+  AppPalette _palette = AppPalette.teal;
+
+  AppController get controller => widget.controller;
 
   @override
   Widget build(BuildContext context) {
@@ -30,7 +39,7 @@ class SmartSabhaApp extends StatelessWidget {
         builder: (context, _) => MaterialApp(
           key: ValueKey(controller.sessionKey),
           title: 'Smart Sabha',
-          theme: AppTheme.light(),
+          theme: AppTheme.light(palette: _palette),
           debugShowCheckedModeBanner: false,
           initialRoute: '/',
           builder: (context, child) {
@@ -67,7 +76,35 @@ class SmartSabhaApp extends StatelessWidget {
                 ),
               );
             }
-            return child ?? const SizedBox.shrink();
+            return Column(
+              children: [
+                Material(
+                  color: Theme.of(context).colorScheme.surface,
+                  child: SafeArea(
+                    bottom: false,
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 4,
+                        ),
+                        child: TextButton.icon(
+                          onPressed: () => setState(() {
+                            _palette =
+                                AppPalette.values[(_palette.index + 1) %
+                                    AppPalette.values.length];
+                          }),
+                          icon: const Icon(Icons.palette_outlined, size: 20),
+                          label: Text('Theme: ${_palette.label}'),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(child: child ?? const SizedBox.shrink()),
+              ],
+            );
           },
           onGenerateRoute: (settings) => _routeFor(settings, controller),
         ),
