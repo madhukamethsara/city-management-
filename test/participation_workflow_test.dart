@@ -276,6 +276,23 @@ void main() {
           );
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull, reason: '${page.runtimeType}');
+          if (page is ConsultationEditor) {
+            final type = find.byType(DropdownButtonFormField<bool>);
+            await tester.ensureVisible(type);
+            await tester.tap(type);
+            await tester.pumpAndSettle();
+            await tester.tap(find.text('Single choice').last);
+            await tester.pumpAndSettle();
+            await tester.ensureVisible(
+              find.widgetWithText(TextFormField, 'Options (one per line)'),
+            );
+            await tester.pumpAndSettle();
+            expect(
+              tester.takeException(),
+              isNull,
+              reason: 'Choice editor $size',
+            );
+          }
         }
       },
     );
