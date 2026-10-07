@@ -48,7 +48,7 @@ class CitizenHomeScreen extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(11),
                 decoration: const BoxDecoration(
-                  color: AppColors.mint,
+                  color: AppColors.amber,
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
@@ -134,13 +134,13 @@ class CitizenHomeScreen extends StatelessWidget {
                   _QuickAction(
                     icon: Icons.assignment_outlined,
                     label: 'My reports',
-                    color: const Color(0xFF2C6EAA),
+                    color: AppColors.ocean,
                     onTap: () => Navigator.pushNamed(context, '/my-reports'),
                   ),
                   _QuickAction(
                     icon: Icons.lightbulb_outline,
                     label: 'Community proposals',
-                    color: const Color(0xFF805AD5),
+                    color: AppColors.violet,
                     onTap: () => Navigator.pushNamed(context, '/proposals'),
                   ),
                 ],
@@ -340,7 +340,14 @@ class _QuickAction extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(9),
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      color.withValues(alpha: 0.18),
+                      color.withValues(alpha: 0.06),
+                    ],
+                  ),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(icon, color: color),

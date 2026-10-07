@@ -3,14 +3,32 @@ import 'package:flutter/material.dart';
 class AppColors {
   AppColors._();
 
-  static const green = Color(0xFF087E6A);
-  static const deepGreen = Color(0xFF07594C);
-  static const mint = Color(0xFFE2F4EF);
-  static const ink = Color(0xFF17211F);
-  static const muted = Color(0xFF66716E);
-  static const surface = Color(0xFFF7FAF9);
-  static const warning = Color(0xFFB56900);
-  static const danger = Color(0xFFB33C32);
+  static const green = Color(0xFF00796B);
+  static const deepGreen = Color(0xFF064E50);
+  static const mint = Color(0xFFDDF5EF);
+  static const ink = Color(0xFF173344);
+  static const muted = Color(0xFF526977);
+  static const surface = Color(0xFFF3F7FB);
+  static const warning = Color(0xFF9A5B00);
+  static const ocean = Color(0xFF245DA8);
+  static const violet = Color(0xFF7154AD);
+  static const amber = Color(0xFFFFCC73);
+  static const border = Color(0xFFDCE6EE);
+
+  static const brandGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [deepGreen, green, ocean],
+    stops: [0, 0.55, 1],
+  );
+
+  static const canvasGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFFEAF7F3), surface, Color(0xFFEEF1FB)],
+  );
+
+  static const danger = Color(0xFFB63E45);
 }
 
 class AppTheme {
@@ -22,11 +40,58 @@ class AppTheme {
       brightness: Brightness.light,
       primary: AppColors.green,
       surface: Colors.white,
+      secondary: AppColors.ocean,
+      tertiary: AppColors.violet,
+      onSurface: AppColors.ink,
+      error: AppColors.danger,
+      outline: AppColors.muted,
+      outlineVariant: AppColors.border,
     );
 
     return ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
+      textTheme: ThemeData.light().textTheme.apply(
+        bodyColor: AppColors.ink,
+        displayColor: AppColors.ink,
+      ),
+      dividerTheme: const DividerThemeData(color: AppColors.border),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        indicatorColor: AppColors.mint,
+        labelTextStyle: WidgetStateProperty.resolveWith(
+          (states) => TextStyle(
+            color: states.contains(WidgetState.selected)
+                ? AppColors.deepGreen
+                : AppColors.muted,
+            fontWeight: states.contains(WidgetState.selected)
+                ? FontWeight.w800
+                : FontWeight.w500,
+          ),
+        ),
+      ),
+      navigationRailTheme: const NavigationRailThemeData(
+        backgroundColor: Colors.white,
+        indicatorColor: AppColors.mint,
+        selectedIconTheme: IconThemeData(color: AppColors.deepGreen),
+        unselectedIconTheme: IconThemeData(color: AppColors.muted),
+        selectedLabelTextStyle: TextStyle(
+          color: AppColors.deepGreen,
+          fontWeight: FontWeight.w800,
+        ),
+        unselectedLabelTextStyle: TextStyle(color: AppColors.muted),
+      ),
+      progressIndicatorTheme: const ProgressIndicatorThemeData(
+        color: AppColors.green,
+        linearTrackColor: AppColors.mint,
+      ),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: AppColors.ink,
+        contentTextStyle: const TextStyle(color: Colors.white),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
       scaffoldBackgroundColor: AppColors.surface,
       appBarTheme: const AppBarTheme(
         backgroundColor: Colors.white,
@@ -41,11 +106,12 @@ class AppTheme {
       ),
       cardTheme: CardThemeData(
         color: Colors.white,
-        elevation: 0,
-        surfaceTintColor: Colors.white,
+        elevation: 1,
+        shadowColor: const Color(0x18173344),
+        surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(18),
-          side: const BorderSide(color: Color(0xFFE2E9E6)),
+          side: const BorderSide(color: Color(0xFFDCE6EE)),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
@@ -57,11 +123,11 @@ class AppTheme {
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xFFD7E1DD)),
+          borderSide: const BorderSide(color: Color(0xFFCBD9E3)),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xFFD7E1DD)),
+          borderSide: const BorderSide(color: Color(0xFFCBD9E3)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
@@ -85,14 +151,14 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
           ),
-          side: const BorderSide(color: Color(0xFFBFCBC6)),
+          side: const BorderSide(color: Color(0xFFB5CAD8)),
           textStyle: const TextStyle(fontWeight: FontWeight.w700),
         ),
       ),
       chipTheme: ChipThemeData(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         side: BorderSide.none,
-        backgroundColor: const Color(0xFFF0F5F3),
+        backgroundColor: const Color(0xFFEAF1F7),
         labelStyle: const TextStyle(
           color: AppColors.ink,
           fontWeight: FontWeight.w600,
