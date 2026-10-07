@@ -61,9 +61,8 @@ class AppLogo extends StatelessWidget {
             width: 38,
             height: 38,
             decoration: BoxDecoration(
-              color: inverse
-                  ? Colors.white.withValues(alpha: 0.16)
-                  : AppColors.green,
+              color: inverse ? Colors.white.withValues(alpha: 0.16) : null,
+              gradient: inverse ? null : AppColors.brandGradient,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
@@ -154,7 +153,8 @@ class PageHeader extends StatelessWidget {
                 width: 45,
                 height: 45,
                 decoration: BoxDecoration(
-                  color: AppColors.mint,
+                  gradient: AppColors.canvasGradient,
+                  border: Border.all(color: AppColors.border),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Icon(icon, color: AppColors.deepGreen),

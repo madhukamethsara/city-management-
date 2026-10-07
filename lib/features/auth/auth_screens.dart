@@ -12,34 +12,37 @@ class WelcomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final wide = constraints.maxWidth > 760;
-            return Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 1080),
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(22),
-                  child: wide
-                      ? Row(
-                          children: <Widget>[
-                            const Expanded(flex: 6, child: _WelcomeHero()),
-                            const SizedBox(width: 38),
-                            Expanded(flex: 4, child: _WelcomeActions()),
-                          ],
-                        )
-                      : const Column(
-                          children: <Widget>[
-                            _WelcomeHero(),
-                            SizedBox(height: 24),
-                            _WelcomeActions(),
-                          ],
-                        ),
+      body: DecoratedBox(
+        decoration: const BoxDecoration(gradient: AppColors.canvasGradient),
+        child: SafeArea(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final wide = constraints.maxWidth > 760;
+              return Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1080),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(22),
+                    child: wide
+                        ? Row(
+                            children: <Widget>[
+                              const Expanded(flex: 6, child: _WelcomeHero()),
+                              const SizedBox(width: 38),
+                              Expanded(flex: 4, child: _WelcomeActions()),
+                            ],
+                          )
+                        : const Column(
+                            children: <Widget>[
+                              _WelcomeHero(),
+                              SizedBox(height: 24),
+                              _WelcomeActions(),
+                            ],
+                          ),
+                  ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
       ),
     );
@@ -55,11 +58,14 @@ class _WelcomeHero extends StatelessWidget {
       padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(28),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: <Color>[AppColors.deepGreen, AppColors.green],
-        ),
+        gradient: AppColors.brandGradient,
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x26064E50),
+            blurRadius: 32,
+            offset: Offset(0, 14),
+          ),
+        ],
       ),
       child: Stack(
         children: <Widget>[
