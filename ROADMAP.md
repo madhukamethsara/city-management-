@@ -61,7 +61,7 @@ project-update feed entries and older-comment browsing remain follow-up work.
    Text and choice answers persist privately with one response per person.
    Live staging verification, proposal attachments, project conversion and
    aggregate consultation results remain follow-up work. The officer editor
-   publishes text questions; choice questions can also be provisioned through RPC.
+   publishes mixed written-answer and single-choice questions with validated options.
    Participation lists/comments currently load in full; server pagination remains work.
 2. Administration follow-up: private audit history with cursor pagination and
    server-side analytics across all project pages are implemented locally.

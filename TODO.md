@@ -36,6 +36,7 @@ presence is not production completion. See ROADMAP.md for current delivery statu
 - [ ] Verify targeted announcement publication and feed participation against staging.
 - [x] Persist proposals, comments, support/follow preferences, and private consultation answers.
 - [x] Add officer proposal review and consultation publication.
+- [x] Add mixed written-answer and single-choice questions to the officer consultation editor.
 - [x] Calculate authority analytics on the server across all project pages.
 - [x] Record private administrator audit history with cursor pagination.
 - [ ] Verify participation, project feedback, audit history and analytics against staging.

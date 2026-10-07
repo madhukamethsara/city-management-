@@ -14,7 +14,8 @@ class _ConsultationEditorState extends State<ConsultationEditor> {
   final _form = GlobalKey<FormState>();
   final _title = TextEditingController();
   final _description = TextEditingController();
-  final _questions = TextEditingController();
+  final _questions = <_QuestionDraft>[_QuestionDraft(0)];
+  int _nextQuestionId = 1;
   final _id = 'con-${DateTime.now().microsecondsSinceEpoch}';
   String? _department;
   DateTime _opening = DateTime.now();
@@ -26,7 +27,9 @@ class _ConsultationEditorState extends State<ConsultationEditor> {
   void dispose() {
     _title.dispose();
     _description.dispose();
-    _questions.dispose();
+    for (final question in _questions) {
+      question.dispose();
+    }
     super.dispose();
   }
 
@@ -59,11 +62,6 @@ class _ConsultationEditorState extends State<ConsultationEditor> {
       );
       return;
     }
-    final lines = _questions.text
-        .split('\n')
-        .map((s) => s.trim())
-        .where((s) => s.isNotEmpty)
-        .toList();
     final consultation = Consultation(
       id: _id,
       title: _title.text.trim(),
@@ -72,12 +70,12 @@ class _ConsultationEditorState extends State<ConsultationEditor> {
       openingDate: _opening,
       closingDate: _closing,
       questions: [
-        for (var i = 0; i < lines.length; i++)
+        for (final draft in _questions)
           ConsultationQuestion(
-            id: 'q-$i',
-            question: lines[i],
-            options: const [],
-            allowsLongText: true,
+            id: 'q-${draft.id}',
+            question: draft.text.text.trim(),
+            options: draft.allowsLongText ? const [] : draft.choices,
+            allowsLongText: draft.allowsLongText,
           ),
       ],
       respondedUserIds: const {},
@@ -92,6 +90,88 @@ class _ConsultationEditorState extends State<ConsultationEditor> {
     if (!mounted) return;
     setState(() => _saving = false);
     if (success) Navigator.pushReplacementNamed(context, '/consultations/$_id');
+  }
+
+  Widget _questionEditor(_QuestionDraft draft, int index) {
+    final locked = _attempt != null;
+    return Card(
+      key: ValueKey(draft.id),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextFormField(
+              controller: draft.text,
+              readOnly: locked,
+              maxLength: 500,
+              minLines: 1,
+              maxLines: 4,
+              decoration: InputDecoration(labelText: 'Question ${index + 1}'),
+              validator: (s) => (s?.trim().length ?? 0) < 4
+                  ? 'Enter at least 4 characters.'
+                  : null,
+            ),
+            DropdownButtonFormField<bool>(
+              value: draft.allowsLongText,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'Answer type'),
+              items: const [
+                DropdownMenuItem(value: true, child: Text('Written answer')),
+                DropdownMenuItem(value: false, child: Text('Single choice')),
+              ],
+              onChanged: locked
+                  ? null
+                  : (value) => setState(() => draft.allowsLongText = value!),
+            ),
+            if (!draft.allowsLongText) ...[
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: draft.options,
+                readOnly: locked,
+                minLines: 3,
+                maxLines: 8,
+                decoration: const InputDecoration(
+                  labelText: 'Options (one per line)',
+                  helperText:
+                      'Add 2–20 distinct options, up to 200 characters each.',
+                  helperMaxLines: 3,
+                ),
+                validator: (_) {
+                  final choices = draft.choices;
+                  if (choices.length < 2 ||
+                      choices.length > 20 ||
+                      choices.any((s) => s.length > 200)) {
+                    return 'Add 2–20 options, up to 200 characters each.';
+                  }
+                  if (choices.map((s) => s.toLowerCase()).toSet().length !=
+                      choices.length) {
+                    return 'Each option must be distinct.';
+                  }
+                  return null;
+                },
+              ),
+            ],
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: locked || _questions.length == 1
+                    ? null
+                    : () {
+                        setState(() => _questions.remove(draft));
+                        // Wait until the removed fields detach their listeners.
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          draft.dispose();
+                        });
+                      },
+                icon: const Icon(Icons.delete_outline),
+                label: Text('Remove question ${index + 1}'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -156,28 +236,16 @@ class _ConsultationEditorState extends State<ConsultationEditor> {
                     validator: (s) => s == null ? 'Choose a department.' : null,
                   ),
                   const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _questions,
-                    minLines: 4,
-                    maxLines: 12,
-                    readOnly: _attempt != null,
-                    decoration: const InputDecoration(
-                      labelText: 'Questions (one per line)',
-                      helperText:
-                          'Residents answer each question in their own words.',
-                    ),
-                    validator: (s) {
-                      final lines = (s ?? '')
-                          .split('\n')
-                          .map((s) => s.trim())
-                          .where((s) => s.isNotEmpty)
-                          .toList();
-                      return lines.isEmpty ||
-                              lines.length > 20 ||
-                              lines.any((q) => q.length < 4 || q.length > 500)
-                          ? 'Add 1–20 questions, each 4–500 characters.'
-                          : null;
-                    },
+                  for (var i = 0; i < _questions.length; i++)
+                    _questionEditor(_questions[i], i),
+                  OutlinedButton.icon(
+                    onPressed: _attempt != null || _questions.length >= 20
+                        ? null
+                        : () => setState(() {
+                            _questions.add(_QuestionDraft(_nextQuestionId++));
+                          }),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add question'),
                   ),
                   const SizedBox(height: 12),
                   OutlinedButton(
@@ -208,5 +276,25 @@ class _ConsultationEditorState extends State<ConsultationEditor> {
         ),
       ),
     );
+  }
+}
+
+class _QuestionDraft {
+  _QuestionDraft(this.id);
+
+  final int id;
+  final text = TextEditingController();
+  final options = TextEditingController();
+  bool allowsLongText = true;
+
+  List<String> get choices => options.text
+      .split('\n')
+      .map((s) => s.trim())
+      .where((s) => s.isNotEmpty)
+      .toList();
+
+  void dispose() {
+    text.dispose();
+    options.dispose();
   }
 }

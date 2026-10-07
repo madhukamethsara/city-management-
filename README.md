@@ -141,6 +141,7 @@ to avoid cross-drive cache failures on Windows.
 
 ## Development guides
 
+- [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md): prioritised next deliveries and consultation editor scope
 - [ROADMAP.md](ROADMAP.md): delivery status and remaining work
 - [BACKEND_SETUP.md](BACKEND_SETUP.md): migrations, authority provisioning, permissions and staging checks
 - [AUTH_SETUP.md](AUTH_SETUP.md): authentication modes, callback configuration and live verification
