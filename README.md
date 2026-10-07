@@ -14,7 +14,7 @@ The project targets Android, iOS and responsive web. It includes a full in-memor
 | Announcements and feed | Drafts, publication, ward/GN division targeting, recipient notifications, comments, reactions and saved updates |
 | Departments | Persistent edits; authority administrators can create departments and remove unused departments |
 | Account management | Authority-scoped role and active-state management with server permission checks |
-| Notifications | Recipient-specific in-app notifications and persistent read state |
+| Notifications | Recipient-specific updates, persistent read state, refresh on opening, pull-to-refresh and retry |
 | Proposals and consultations | Persistent proposals, support/follow actions, comments, officer review, consultations and private text/choice answers |
 | Administration history and analytics | Authority-scoped audit events and server-calculated metrics across all project pages |
 
@@ -47,7 +47,7 @@ Demo data is seeded and held in memory. It resets when the app restarts. These a
 
 Follow [authentication setup](AUTH_SETUP.md) for email delivery, callback URLs and session configuration, then [backend setup](BACKEND_SETUP.md) for database provisioning and verification.
 
-Apply all nine migrations in order before starting connected mode:
+Apply all ten migrations in order before starting connected mode:
 
 1. `supabase/migrations/202609290001_report_workflow.sql`
 2. `supabase/migrations/202609300001_project_workflow.sql`
@@ -58,6 +58,7 @@ Apply all nine migrations in order before starting connected mode:
 7. `supabase/migrations/202610060002_admin_observability.sql`
 8. `supabase/migrations/202610060003_project_feedback.sql`
 9. `supabase/migrations/202610060004_project_assets.sql`
+10. `supabase/migrations/202610070001_notification_refresh.sql`
 
 Provision actual authorities and departments, register staging users, and assign the initial officer/administrator roles as described in the backend guide. New accounts start as citizens. Server functions enforce authority and role permissions; connected mode does not fall back to demo records.
 

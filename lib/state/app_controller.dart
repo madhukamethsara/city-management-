@@ -131,6 +131,7 @@ class AppController extends ChangeNotifier {
   int _refreshSequence = 0;
   int _projectReadSequence = 0;
   int _announcementReadSequence = 0;
+  int _notificationReadSequence = 0;
   int _announcementOffset = 0;
   int _announcementTotal = 0;
   bool get hasMoreAnnouncements => _announcementOffset < _announcementTotal;
@@ -162,6 +163,7 @@ class AppController extends ChangeNotifier {
   }
 
   void _clearSessionData() {
+    ++_notificationReadSequence;
     _analytics = null;
     _users = [];
     _departments = [];
@@ -196,6 +198,7 @@ class AppController extends ChangeNotifier {
   }
 
   void _applyData(InitialCivicData data) {
+    ++_notificationReadSequence;
     ++_dataRevision;
     ++_projectReadSequence;
     _authorities = data.authorities;
@@ -1083,6 +1086,39 @@ class AppController extends ChangeNotifier {
     final saved = await _repository.createConsultation(consultation);
     _checkSession(generation);
     _consultations = _mergeRecords(_consultations, [saved], (c) => c.id);
+    notifyListeners();
+  }
+
+  Future<void> refreshNotifications() async {
+    if (!canParticipate || _currentUser?.isActive != true) return;
+    final generation = _sessionGeneration;
+    final sequence = ++_notificationReadSequence;
+    final initialIds = _notifications.map((n) => n.id).toSet();
+    final loaded = await _repository.loadNotifications();
+    if (_disposed ||
+        generation != _sessionGeneration ||
+        sequence != _notificationReadSequence) {
+      return;
+    }
+    // A read confirmation or locally created notification may arrive while
+    // the server snapshot is in flight. Preserve both without reloading drafts.
+    final readIds = _notifications
+        .where((n) => n.isRead)
+        .map((n) => n.id)
+        .toSet();
+    final byId = {
+      for (final n in _notifications)
+        if (!initialIds.contains(n.id)) n.id: n,
+      for (final n in loaded)
+        n.id: n.copyWith(isRead: n.isRead || readIds.contains(n.id)),
+    };
+    _notifications = byId.values.toList()
+      ..sort((a, b) {
+        final order = b.createdAt.compareTo(a.createdAt);
+        return order == 0 ? a.id.compareTo(b.id) : order;
+      });
+    // Invalidate any older full-account snapshot that could replace this list.
+    ++_refreshSequence;
     notifyListeners();
   }
 

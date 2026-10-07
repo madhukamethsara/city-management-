@@ -67,7 +67,7 @@ class _CitizenShellState extends State<CitizenShell> {
       const CivicFeedScreen(),
       const ReportWizardScreen(embedded: true),
       const ProjectExplorerScreen(embedded: true),
-      const NotificationsScreen(),
+      NotificationsScreen(active: _index == 4),
       const ProfileScreen(),
     ];
     final appBar = AppBar(

@@ -42,6 +42,7 @@ try {
     grant select, insert on storage.objects to authenticated;
   `);
   await db.exec(await readFile(new URL('../supabase/migrations/202609290001_report_workflow.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/202610070001_notification_refresh.sql', import.meta.url), 'utf8'));
   check(true, 'migration executes');
   await db.exec(`
     insert into civic_private.authorities values
@@ -63,6 +64,12 @@ try {
   await db.query("update civic_private.profiles set role='officer' where id=$1", [officer]);
   await asUser(null, 'anon');
   const guest = await rpc('civic_bootstrap');
+  await denied(() => rpc('civic_notifications'));
+  await asUser(null);
+  await denied(() => rpc('civic_notifications'));
+  await asUser('55555555-5555-4555-8555-555555555555');
+  await denied(() => rpc('civic_notifications'));
+  await asUser(null, 'anon');
   check(guest.authorities.length === 2 && guest.reports.length === 0 && guest.users.length === 0, 'guest sees only reference data');
   await denied(() => rpc('civic_save_report',['{}',true],['jsonb','boolean']));
   await asUser(resident);
@@ -112,6 +119,21 @@ try {
   data = await rpc('civic_bootstrap');
   check(data.reports[0].status === 'resolved' && data.reports[0].internalNotes.length === 0, 'resident sees status but no internal notes');
   check(data.notifications.length === 2, 'resident receives the officer update');
+  const refreshed = await rpc('civic_notifications');
+  check(refreshed.length === 2, 'dedicated refresh returns recipient notifications');
+  const notificationId = refreshed[0].id;
+  await rpc('civic_save_profile_notifications', ['[]', JSON.stringify([
+    {id:notificationId,isRead:true}
+  ])], ['jsonb','jsonb']);
+  check((await rpc('civic_notifications')).find(n => n.id === notificationId).isRead,
+    'refresh returns persisted read state');
+  await asUser(neighbour);
+  check((await rpc('civic_notifications')).length === 0, 'same-authority resident cannot read another recipient');
+  await asUser(officer);
+  check((await rpc('civic_notifications')).length === 0, 'officer cannot read resident notifications');
+  await asUser(other);
+  check((await rpc('civic_notifications')).length === 0, 'another authority cannot read resident notifications');
+  await asUser(resident);
   saved = data.reports[0];
   saved = await rpc('civic_save_report',[JSON.stringify({...saved,status:'inProgress',
     updates:[...saved.updates,{status:'inProgress',message:'Spoofed message',date:now,isPublic:true}]}),false],['jsonb','boolean']);
@@ -140,6 +162,7 @@ try {
   await db.query('update civic_private.profiles set active=false where id=$1',[resident]);
   await asUser(resident);
   await denied(()=>rpc('civic_bootstrap'));
+  await denied(()=>rpc('civic_notifications'));
   check((await db.query('select * from storage.objects')).rows.length===0,'inactive users cannot read evidence');
   console.log('PASS: ' + checks + ' PostgreSQL workflow and permission checks');
 } finally { await db.close(); }
