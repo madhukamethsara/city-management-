@@ -31,14 +31,24 @@ class AppColors {
   static const danger = Color(0xFFB63E45);
 }
 
+enum AppPalette {
+  teal('Radiant Teal', AppColors.green),
+  ocean('Ocean Blue', AppColors.ocean),
+  violet('Royal Violet', AppColors.violet);
+
+  const AppPalette(this.label, this.seed);
+  final String label;
+  final Color seed;
+}
+
 class AppTheme {
   AppTheme._();
 
-  static ThemeData light() {
+  static ThemeData light({AppPalette palette = AppPalette.teal}) {
     final scheme = ColorScheme.fromSeed(
-      seedColor: AppColors.green,
+      seedColor: palette.seed,
       brightness: Brightness.light,
-      primary: AppColors.green,
+      primary: palette.seed,
       surface: Colors.white,
       secondary: AppColors.ocean,
       tertiary: AppColors.violet,
@@ -48,6 +58,9 @@ class AppTheme {
       outlineVariant: AppColors.border,
     );
 
+    final accent = scheme.primary;
+    final accentSurface = scheme.primaryContainer;
+    final accentInk = scheme.onPrimaryContainer;
     return ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
@@ -59,11 +72,11 @@ class AppTheme {
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: Colors.white,
         surfaceTintColor: Colors.transparent,
-        indicatorColor: AppColors.mint,
+        indicatorColor: accentSurface,
         labelTextStyle: WidgetStateProperty.resolveWith(
           (states) => TextStyle(
             color: states.contains(WidgetState.selected)
-                ? AppColors.deepGreen
+                ? accentInk
                 : AppColors.muted,
             fontWeight: states.contains(WidgetState.selected)
                 ? FontWeight.w800
@@ -71,20 +84,20 @@ class AppTheme {
           ),
         ),
       ),
-      navigationRailTheme: const NavigationRailThemeData(
+      navigationRailTheme: NavigationRailThemeData(
         backgroundColor: Colors.white,
-        indicatorColor: AppColors.mint,
-        selectedIconTheme: IconThemeData(color: AppColors.deepGreen),
+        indicatorColor: accentSurface,
+        selectedIconTheme: IconThemeData(color: accentInk),
         unselectedIconTheme: IconThemeData(color: AppColors.muted),
         selectedLabelTextStyle: TextStyle(
-          color: AppColors.deepGreen,
+          color: accentInk,
           fontWeight: FontWeight.w800,
         ),
         unselectedLabelTextStyle: TextStyle(color: AppColors.muted),
       ),
-      progressIndicatorTheme: const ProgressIndicatorThemeData(
-        color: AppColors.green,
-        linearTrackColor: AppColors.mint,
+      progressIndicatorTheme: ProgressIndicatorThemeData(
+        color: accent,
+        linearTrackColor: accentSurface,
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: AppColors.ink,
@@ -92,7 +105,10 @@ class AppTheme {
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
-      scaffoldBackgroundColor: AppColors.surface,
+      scaffoldBackgroundColor: Color.alphaBlend(
+        accent.withValues(alpha: 0.04),
+        AppColors.surface,
+      ),
       appBarTheme: const AppBarTheme(
         backgroundColor: Colors.white,
         foregroundColor: AppColors.ink,
@@ -131,7 +147,7 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: AppColors.green, width: 1.6),
+          borderSide: BorderSide(color: accent, width: 1.6),
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
