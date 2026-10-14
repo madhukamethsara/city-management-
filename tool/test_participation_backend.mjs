@@ -31,7 +31,7 @@ try {
     '202610020001_announcement_workflow.sql','202610040001_officer_management.sql',
     '202610050001_department_lifecycle.sql','202610060001_participation.sql',
     '202610060002_admin_observability.sql','202610060003_project_feedback.sql',
-    '202610060004_project_assets.sql','202610090001_consultation_results.sql']) {
+    '202610060004_project_assets.sql','202610140001_proposal_conversion.sql']) {
     await db.exec(await readFile(new URL('../supabase/migrations/'+file,import.meta.url),'utf8'));
   }
   await db.exec(`insert into civic_private.authorities values ('a','{}'),('b','{}');
@@ -196,9 +196,43 @@ try {
   await asUser(resident);
   await denied(()=>rpc('civic_participation'));
   await denied(()=>preference(false,false));
+  // Proposal conversion is atomic, officer-only and safe to retry.
+  const conversionProject = {...assetDraft,id:'p-converted',imageLabels:[]};
+  const convert = (payload=conversionProject,revision=3,id='pr-test') =>
+    rpc('civic_convert_proposal',[id,revision,JSON.stringify(payload)],['text','integer','jsonb']);
+  await denied(()=>convert()); // inactive resident
+  await asUser(null,'anon');
+  await denied(()=>convert());
+  await asUser(other);
+  await denied(()=>convert());
+  await db.exec('reset role');
+  await db.query('update civic_private.profiles set active=true where id=$1',[resident]);
+  await asUser(resident);
+  await denied(()=>convert());
+  await asUser(officer);
+  await denied(()=>convert(conversionProject,2),'40001');
+  await denied(()=>convert({...conversionProject,authorityId:'b'}));
+  await denied(()=>convert({...conversionProject,department:'Missing'}),'22023');
+  check((await rpc('civic_participation')).proposals[0].status==='approved');
+  check((await rpc('civic_list_projects',['',null, 'Latest',0,100],['text','text','text','integer','integer'])).projects.every(p=>p.id!=='p-converted'));
+  await denied(()=>convert({...conversionProject,id:'p-upload'}),'40001');
+  const converted = await convert();
+  check(converted.proposal.status==='convertedToProject' && converted.proposal.projectId==='p-converted');
+  check(converted.proposal.revision===4 && converted.project.revision===1);
+  check((await convert()).project.id==='p-converted');
+  await denied(()=>convert({...conversionProject,id:'p-duplicate'}),'40001');
+  await denied(()=>review('approved',4),'22023');
+  await asUser(resident);
+  check((await rpc('civic_participation')).proposals[0].projectId==='p-converted');
+  const conversionNotices = (await rpc('civic_bootstrap')).notifications.filter(n=>n.title==='Proposal became a project');
+  check(conversionNotices.length===1 && conversionNotices[0].route==='/projects/p-converted');
+  await denied(()=>convert());
+  await asUser(officer);
+  const unapproved = await createProposal({...proposal,id:'pr-unapproved'});
+  await denied(()=>convert({...conversionProject,id:'p-unapproved'},unapproved.revision,unapproved.id),'22023');
   await db.exec('reset role');
   await db.query('update civic_private.profiles set active=false where id=$1',[officer]);
   await asUser(officer);
-  await denied(()=>results());
+  await denied(()=>convert());
   console.log(`Participation backend: ${checks} checks passed.`);
 } finally { await db.close(); }

@@ -32,6 +32,26 @@ class SupabaseCivicRepository extends CivicRepository {
   bool get isPersistent => true;
 
   @override
+  Future<CivicChanges> convertProposal(Proposal proposal, Project project) =>
+      _perform(() async {
+        final result = Json.from(
+          await client.rpc(
+                'civic_convert_proposal',
+                params: {
+                  'proposal_id': proposal.id,
+                  'expected_revision': proposal.revision,
+                  'payload': projectToJson(project),
+                },
+              )
+              as Map,
+        );
+        return CivicChanges(
+          proposals: [proposalFromJson(Json.from(result['proposal'] as Map))],
+          projects: [projectFromJson(Json.from(result['project'] as Map))],
+        );
+      });
+
+  @override
   Future<List<AppNotification>> loadNotifications() => _perform(
     () async => objects(
       await client.rpc('civic_notifications'),

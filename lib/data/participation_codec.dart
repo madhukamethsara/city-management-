@@ -46,6 +46,7 @@ Proposal proposalFromJson(Json p) => Proposal(
   followerIds: strings(p['followerIds']).toSet(),
   supportCount: p['supportCount'] as int,
   revision: p['revision'] as int,
+  projectId: p['projectId'] as String?,
   comments: objects(p['comments'])
       .map(
         (c) => CivicComment(

@@ -26,9 +26,10 @@ Choice consultation publication and results still need verification against live
    project following/uploads, targeted announcements and consultation answers.
    Verify access isolation between authorities and roles. Record reproducible
    results and failures before release. Requires a configured staging project.
-2. **Participation completeness.** Verify the implemented aggregate consultation
-   results in staging, then deliver proposal attachments and proposal-to-project
-   conversion. Each feature should include database permission tests and Flutter
+2. **Participation completeness.** Deliver aggregate consultation results with
+   privacy and role checks, then proposal attachments. Proposal-to-project conversion
+   is implemented locally with an atomic RPC, retry protection and the existing
+   project editor. Verify conversion and notifications in staging. Each feature should include database permission tests and Flutter
    workflow tests. Add server pagination for participation lists and comments.
 3. **Administration and reference data.** Replace demo ward/division options with
    authority-managed records, implement authority transfers and use unique officer
