@@ -1069,6 +1069,12 @@ class AppController extends ChangeNotifier {
   Future<void> reviewProposal(String id, ProposalStatus status) async {
     final generation = _sessionGeneration;
     final proposal = proposalById(id);
+    if (proposal?.projectId != null ||
+        status == ProposalStatus.convertedToProject) {
+      throw const CivicFailure(
+        'Use project conversion for approved proposals.',
+      );
+    }
     if (!(_currentUser?.role.canManageAuthority ?? false) || proposal == null) {
       throw const CivicFailure('Only officers can review proposals.');
     }
@@ -1076,6 +1082,25 @@ class AppController extends ChangeNotifier {
     _checkSession(generation);
     _proposals = _mergeRecords(_proposals, [saved], (p) => p.id);
     notifyListeners();
+  }
+
+  Future<Project> convertProposal(Proposal proposal, Project project) async {
+    final generation = _sessionGeneration;
+    if (!isOfficer ||
+        _currentUser?.isActive != true ||
+        proposal.status != ProposalStatus.approved ||
+        project.authorityId != _currentUser?.localAuthorityId) {
+      throw const CivicFailure(
+        'An active officer and approved proposal are required.',
+      );
+    }
+    final saved = await _repository.convertProposal(proposal, project);
+    _checkSession(generation);
+    ++_projectReadSequence;
+    _proposals = _mergeRecords(_proposals, saved.proposals, (p) => p.id);
+    _projects = _mergeRecords(_projects, saved.projects, (p) => p.id);
+    notifyListeners();
+    return saved.projects.single;
   }
 
   Future<void> createConsultation(Consultation consultation) async {

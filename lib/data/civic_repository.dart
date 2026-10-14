@@ -1,10 +1,15 @@
 import 'dart:typed_data';
 
 import '../models/domain_models.dart';
+import 'civic_failure.dart';
 
 /// Data boundary for loading and saving civic records.
 /// Production adapters must enforce authentication and authority-scoped access.
 abstract class CivicRepository {
+  /// Creates a project and links an approved proposal in one transaction.
+  Future<CivicChanges> convertProposal(Proposal proposal, Project project) =>
+      throw const CivicFailure('Proposal conversion is unavailable.');
+
   bool get isPersistent => false;
 
   /// Loads only the signed-in recipient's notifications in persistent adapters.

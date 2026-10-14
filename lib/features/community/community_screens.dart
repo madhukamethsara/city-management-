@@ -1,5 +1,6 @@
 import '../../widgets/save_civic_action.dart';
 import 'announcement_controls.dart';
+import '../admin/admin_screens.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -843,7 +844,8 @@ class _ProposalDetailScreenState extends State<ProposalDetailScreen> {
         child: ListView(
           children: <Widget>[
             _ProposalStatusBadge(status: proposal.status),
-            if (controller.currentUser?.role.canManageAuthority ?? false)
+            if ((controller.currentUser?.role.canManageAuthority ?? false) &&
+                proposal.status != ProposalStatus.convertedToProject)
               DropdownButtonFormField<ProposalStatus>(
                 value:
                     ProposalStatus.values
@@ -871,6 +873,23 @@ class _ProposalDetailScreenState extends State<ProposalDetailScreen> {
                 },
               ),
             const SizedBox(height: 12),
+            if (proposal.projectId != null)
+              OutlinedButton.icon(
+                onPressed: () => Navigator.pushNamed(
+                  context,
+                  '/projects/${proposal.projectId}',
+                ),
+                icon: const Icon(Icons.account_tree_outlined),
+                label: const Text('View resulting project'),
+              ),
+            if (proposal.status == ProposalStatus.approved &&
+                controller.isOfficer)
+              FilledButton.icon(
+                onPressed: () =>
+                    AdminProjectsPanel.convertProposal(context, proposal),
+                icon: const Icon(Icons.account_tree_outlined),
+                label: const Text('Convert to project'),
+              ),
             Text(
               proposal.title,
               style: Theme.of(

@@ -1,5 +1,8 @@
 import '../models/domain_models.dart';
 import 'civic_repository.dart';
+import 'civic_failure.dart';
+import 'project_codec.dart';
+import 'dart:convert';
 
 class DemoCivicRepository extends CivicRepository {
   final Map<String, Announcement> _savedAnnouncements = {};
@@ -17,6 +20,48 @@ class DemoCivicRepository extends CivicRepository {
   }
 
   final Map<String, Project> _savedProjects = {};
+  final Map<String, String> _conversionPayloads = {};
+
+  @override
+  Future<CivicChanges> convertProposal(
+    Proposal proposal,
+    Project project,
+  ) async {
+    final data = await loadInitialData();
+    final current =
+        _savedProposals[proposal.id] ??
+        data.proposals.firstWhere((p) => p.id == proposal.id);
+    final payload = jsonEncode(projectToJson(project));
+    if (current.projectId != null) {
+      if (current.projectId != project.id ||
+          _conversionPayloads[proposal.id] != payload ||
+          proposal.revision != current.revision - 1) {
+        throw const CivicFailure('This proposal already has a project.');
+      }
+      return CivicChanges(
+        proposals: [current],
+        projects: [_savedProjects[project.id]!],
+      );
+    }
+    if (current.status != ProposalStatus.approved ||
+        current.revision != proposal.revision ||
+        project.revision != 0 ||
+        _savedProjects.containsKey(project.id) ||
+        data.projects.any((p) => p.id == project.id)) {
+      throw const CivicFailure('Refresh and select an approved proposal.');
+    }
+    final saved = project.copyWith(revision: 1);
+    final converted = current.copyWith(
+      projectId: project.id,
+      status: ProposalStatus.convertedToProject,
+      revision: current.revision + 1,
+    );
+    _savedProjects[project.id] = saved;
+    _savedProposals[proposal.id] = converted;
+    _conversionPayloads[proposal.id] = payload;
+    return CivicChanges(proposals: [converted], projects: [saved]);
+  }
+
   final Map<String, FeedItem> _savedFeedItems = {};
   final Map<String, Proposal> _savedProposals = {};
   final Map<String, Consultation> _savedConsultations = {};

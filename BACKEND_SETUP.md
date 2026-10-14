@@ -157,7 +157,19 @@ with text questions. The backend also accepts validated choice questions.
 Answers are private to their author; only aggregate response counts are shared.
 One response per resident is enforced on the server, and exact retries are safe.
 Creation and comment forms retain request IDs and original payloads after an
-uncertain result. Binary proposal attachments and project conversion remain deferred.
+uncertain result. Binary proposal attachments remain deferred.
+
+Apply `202610140001_proposal_conversion.sql` after participation, observability
+and project assets for proposal conversion. An active same-authority officer can
+open an approved proposal and choose Convert to project. The editor pre-fills the
+proposal title, description, category and location label; review the map location,
+department, dates and budget before submitting. One transaction creates the
+project, links the proposal and notifies its active author/followers. Exact retries
+return the same project; changed requests and stale revisions are rejected.
+Converted proposals cannot return to review status. Residents can open the project
+from the proposal after a refresh. Verify this workflow across real resident and
+officer sessions, including a lost response, another authority and an inactive
+account. Local permission tests do not verify live Supabase delivery.
 Authority analytics is calculated on the server from all authority records,
 including projects beyond the first page. Use console refresh to update metrics.
 Authority/platform administrators can open Administration history under More civic
