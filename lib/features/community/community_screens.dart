@@ -1,5 +1,6 @@
 import '../../widgets/save_civic_action.dart';
 import 'announcement_controls.dart';
+import 'consultation_results_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -1278,6 +1279,18 @@ class _ConsultationDetailScreenState extends State<ConsultationDetailScreen> {
       appBar: AppBar(
         title: const Text('Consultation'),
         actions: [
+          if (controller.isOfficer)
+            IconButton(
+              tooltip: 'View results',
+              icon: const Icon(Icons.bar_chart),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => ConsultationResultsScreen(
+                    consultationId: widget.consultationId,
+                  ),
+                ),
+              ),
+            ),
           IconButton(
             tooltip: 'Refresh consultation',
             icon: const Icon(Icons.refresh),

@@ -4,7 +4,7 @@ The core civic modules have local implementations. Prioritise focused feature
 deliveries alongside staging verification; local tests alone do not establish
 production readiness. See ROADMAP.md and TODO.md for the full inventory.
 
-## Current delivery: consultation question editor
+## Delivered locally: consultation question editor and aggregate results
 
 - Allow officers to combine written answers and single-choice questions.
 - Add and remove questions, retaining at least one and allowing at most 20.
@@ -13,8 +13,11 @@ production readiness. See ROADMAP.md and TODO.md for the full inventory.
 - Preserve the exact publication request after a network failure for safe retries.
 - Verify publication, invalid choices, retries, narrow layouts and enlarged text.
 
-Uses the existing participation migration; no new schema or deployment is needed.
-Choice consultation publication still needs verification against live staging.
+The question editor uses the existing participation migration. Officer aggregate
+results require `202610090001_consultation_results.sql` after notification refresh.
+Results show choice counts/percentages and written-answer totals without exposing
+respondent identities or written content. Refresh, retry and session isolation are supported.
+Choice consultation publication and results still need verification against live staging.
 
 ## Next deliveries, in priority order
 
@@ -23,8 +26,8 @@ Choice consultation publication still needs verification against live staging.
    project following/uploads, targeted announcements and consultation answers.
    Verify access isolation between authorities and roles. Record reproducible
    results and failures before release. Requires a configured staging project.
-2. **Participation completeness.** Deliver aggregate consultation results with
-   privacy and role checks, then proposal attachments and proposal-to-project
+2. **Participation completeness.** Verify the implemented aggregate consultation
+   results in staging, then deliver proposal attachments and proposal-to-project
    conversion. Each feature should include database permission tests and Flutter
    workflow tests. Add server pagination for participation lists and comments.
 3. **Administration and reference data.** Replace demo ward/division options with

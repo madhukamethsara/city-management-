@@ -1,7 +1,7 @@
 # Connected reports, projects, announcements and feed
 
 Supabase mode now uses persistent civic data as well as authentication.
-Apply all ten migrations in order before launching a configured app. Existing auth-only
+Apply all eleven migrations in order before launching a configured app. Existing auth-only
 deployments must complete this setup; there is no automatic demo-data fallback.
 
 ## Configure a staging project
@@ -27,6 +27,10 @@ deployments must complete this setup; there is no automatic demo-data fallback.
    `202610060003_project_feedback.sql` and `202610060004_project_assets.sql`
    from the same migrations directory. Then apply
    `202610070001_notification_refresh.sql` for the recipient-only refresh RPC.
+   Then apply `202610090001_consultation_results.sql` for officer-only aggregate
+   consultation results. This RPC returns per-choice counts and answer totals,
+   never respondent identifiers or written answers. Verify same-authority officer
+   access and rejection of residents, other authorities and inactive accounts in staging.
    These add civic participation, audit events, complete analytics and project
    feedback and public image/PDF uploads. Consultation ownership also protects
    departments from removal.

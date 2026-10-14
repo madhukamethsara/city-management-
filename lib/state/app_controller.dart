@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 import '../data/civic_repository.dart';
 import '../data/civic_failure.dart';
 import '../models/domain_models.dart';
+import '../models/consultation_results.dart';
 
 class OnboardingDraft {
   const OnboardingDraft({
@@ -298,6 +299,18 @@ class AppController extends ChangeNotifier {
       throw const CivicFailure('Administrator access required.');
     }
     final result = await _repository.auditEvents(beforeId: beforeId);
+    _checkSession(generation, isMutation: false);
+    return result;
+  }
+
+  Future<ConsultationResults> consultationResults(String id) async {
+    final generation = _sessionGeneration;
+    if (!isOfficer ||
+        _currentUser?.isActive != true ||
+        _currentUser?.onboardingComplete != true) {
+      throw const CivicFailure('Officer access required.');
+    }
+    final result = await _repository.consultationResults(id);
     _checkSession(generation, isMutation: false);
     return result;
   }

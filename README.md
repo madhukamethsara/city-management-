@@ -15,7 +15,7 @@ The project targets Android, iOS and responsive web. It includes a full in-memor
 | Departments | Persistent edits; authority administrators can create departments and remove unused departments |
 | Account management | Authority-scoped role and active-state management with server permission checks |
 | Notifications | Recipient-specific updates, persistent read state, refresh on opening, pull-to-refresh and retry |
-| Proposals and consultations | Persistent proposals, support/follow actions, comments, officer review, consultations and private text/choice answers |
+| Proposals and consultations | Persistent proposals, support/follow actions, comments, officer review, consultations, private text/choice answers and officer aggregate results |
 | Administration history and analytics | Authority-scoped audit events and server-calculated metrics across all project pages |
 
 The interface includes an OpenStreetMap explorer, responsive navigation and officer case-management views. Project feedback persists. Officers can upload public project images and PDF documents (up to 10 MB each). Connected analytics includes all authority records, refreshed through the console refresh action.
@@ -47,7 +47,7 @@ Demo data is seeded and held in memory. It resets when the app restarts. These a
 
 Follow [authentication setup](AUTH_SETUP.md) for email delivery, callback URLs and session configuration, then [backend setup](BACKEND_SETUP.md) for database provisioning and verification.
 
-Apply all ten migrations in order before starting connected mode:
+Apply all eleven migrations in order before starting connected mode:
 
 1. `supabase/migrations/202609290001_report_workflow.sql`
 2. `supabase/migrations/202609300001_project_workflow.sql`
@@ -59,6 +59,11 @@ Apply all ten migrations in order before starting connected mode:
 8. `supabase/migrations/202610060003_project_feedback.sql`
 9. `supabase/migrations/202610060004_project_assets.sql`
 10. `supabase/migrations/202610070001_notification_refresh.sql`
+11. `supabase/migrations/202610090001_consultation_results.sql`
+
+Officers can open a consultation and select **View results** to see response totals,
+choice counts and percentages. Written answers and respondent identities stay private.
+Results support refresh and retry; live staging verification remains pending.
 
 Provision actual authorities and departments, register staging users, and assign the initial officer/administrator roles as described in the backend guide. New accounts start as citizens. Server functions enforce authority and role permissions; connected mode does not fall back to demo records.
 

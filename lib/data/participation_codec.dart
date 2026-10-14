@@ -1,5 +1,25 @@
 import '../models/domain_models.dart';
+import '../models/consultation_results.dart';
 import 'report_codec.dart';
+
+ConsultationResults consultationResultsFromJson(Json data) =>
+    ConsultationResults(
+      consultationId: data['consultationId'] as String,
+      totalResponses: data['totalResponses'] as int,
+      questions: [
+        for (final q in objects(data['questions']))
+          ConsultationQuestionResult(
+            id: q['id'] as String,
+            question: q['question'] as String,
+            allowsLongText: q['allowsLongText'] == true,
+            responseCount: q['responseCount'] as int,
+            optionCounts: {
+              for (final option in objects(q['options']))
+                option['label'] as String: option['count'] as int,
+            },
+          ),
+      ],
+    );
 
 Json proposalToJson(Proposal p) => {
   'id': p.id,

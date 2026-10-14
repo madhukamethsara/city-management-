@@ -1,10 +1,16 @@
 import 'dart:typed_data';
 
 import '../models/domain_models.dart';
+import '../models/consultation_results.dart';
+import 'civic_failure.dart';
 
 /// Data boundary for loading and saving civic records.
 /// Production adapters must enforce authentication and authority-scoped access.
 abstract class CivicRepository {
+  /// Aggregate results only; adapters must never return respondent identities.
+  Future<ConsultationResults> consultationResults(String id) async =>
+      throw const CivicFailure('Consultation results are unavailable.');
+
   bool get isPersistent => false;
 
   /// Loads only the signed-in recipient's notifications in persistent adapters.
