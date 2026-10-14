@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/domain_models.dart';
+import '../models/consultation_results.dart';
 import 'civic_failure.dart';
 import 'civic_repository.dart';
 import 'report_codec.dart';
@@ -11,6 +12,19 @@ import 'participation_codec.dart';
 /// Connected release: profiles, reports, projects, evidence, and notifications.
 /// Unsupported civic modules never fall back to in-memory writes.
 class SupabaseCivicRepository extends CivicRepository {
+  @override
+  Future<ConsultationResults> consultationResults(String id) => _perform(
+    () async => consultationResultsFromJson(
+      Json.from(
+        await client.rpc(
+              'civic_consultation_results',
+              params: {'consultation_id': id},
+            )
+            as Map,
+      ),
+    ),
+  );
+
   SupabaseCivicRepository({SupabaseClient? client}) : _client = client;
   final SupabaseClient? _client;
   SupabaseClient get client => _client ?? Supabase.instance.client;

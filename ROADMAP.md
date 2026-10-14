@@ -84,6 +84,7 @@ results are delivered separately; neither feature has been verified in staging.
 Apply the four 20261006 migrations in filename order after department lifecycle.
 Connected screens require these migrations; they do not fall back to demo data.
 Then apply `202610070001_notification_refresh.sql` for notification refresh.
+Apply `202610090001_consultation_results.sql` afterward for officer-only consultation results.
 The notification screen fetches on opening and provides pull-to-refresh, a
 refresh button and retry without reloading other civic data. Late responses are
 discarded after account changes; confirmed read state survives a stale snapshot.

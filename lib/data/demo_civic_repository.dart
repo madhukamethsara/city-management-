@@ -1,10 +1,45 @@
 import '../models/domain_models.dart';
+import '../models/consultation_results.dart';
+import 'civic_failure.dart';
 import 'civic_repository.dart';
 import 'civic_failure.dart';
 import 'project_codec.dart';
 import 'dart:convert';
 
 class DemoCivicRepository extends CivicRepository {
+  @override
+  Future<ConsultationResults> consultationResults(String id) async {
+    final matches = (await loadInitialData()).consultations.where(
+      (c) => c.id == id,
+    );
+    if (matches.isEmpty) {
+      throw const CivicFailure('This consultation could not be found.');
+    }
+    final consultation = matches.single;
+    return ConsultationResults(
+      consultationId: id,
+      totalResponses: consultation.totalResponses,
+      questions: [
+        for (final question in consultation.questions)
+          ConsultationQuestionResult(
+            id: question.id,
+            question: question.question,
+            allowsLongText: question.allowsLongText,
+            responseCount: consultation.answers.values
+                .where((answers) => answers.containsKey(question.id))
+                .length,
+            optionCounts: {
+              if (!question.allowsLongText)
+                for (final option in question.options)
+                  option: consultation.answers.values
+                      .where((answers) => answers[question.id] == option)
+                      .length,
+            },
+          ),
+      ],
+    );
+  }
+
   final Map<String, Announcement> _savedAnnouncements = {};
   Future<InitialCivicData>? _seed;
   final Map<String, CivicReport> _savedReports = {};

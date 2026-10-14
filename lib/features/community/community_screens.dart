@@ -1297,6 +1297,18 @@ class _ConsultationDetailScreenState extends State<ConsultationDetailScreen> {
       appBar: AppBar(
         title: const Text('Consultation'),
         actions: [
+          if (controller.isOfficer)
+            IconButton(
+              tooltip: 'View results',
+              icon: const Icon(Icons.bar_chart),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => ConsultationResultsScreen(
+                    consultationId: widget.consultationId,
+                  ),
+                ),
+              ),
+            ),
           IconButton(
             tooltip: 'Refresh consultation',
             icon: const Icon(Icons.refresh),

@@ -85,12 +85,17 @@ try {
       {id:'q2',question:'Explain your choice',options:[],allowsLongText:true}]};
   const createConsultation = c => jsonRpc('civic_create_consultation',c);
   const answer = answers => rpc('civic_answer_consultation',['con-test',JSON.stringify(answers)],['text','jsonb']);
+  const results = (id='con-test') => rpc('civic_consultation_results',[id],['text']);
   await denied(()=>createConsultation({...consultation,questions:[]}),'22023');
   await denied(()=>createConsultation({...consultation,department:'Other'}),'22023');
   check((await createConsultation(consultation)).id==='con-test');
   check((await createConsultation(consultation)).id==='con-test');
+  const emptyResults = await results();
+  check(emptyResults.totalResponses===0 && emptyResults.questions[0].options.every(o=>o.count===0));
+  await denied(()=>results('con-missing'));
   await denied(()=>createConsultation({...consultation,title:'Changed consultation'}),'40001');
   await asUser(resident);
+  await denied(()=>results());
   await denied(()=>createConsultation({...consultation,id:'con-resident'}));
   await denied(()=>answer({q1:'Raised'}),'22023');
   await denied(()=>answer({q1:'Fake',q2:'Reason'}),'22023');
@@ -100,6 +105,12 @@ try {
   check((await answer({q1:'Raised',q2:'Slower traffic near school.'})).responseCount===1);
   await denied(()=>answer({q1:'Signals',q2:'Changed'}),'40001');
   await asUser(officer);
+  const aggregate = await results();
+  check(aggregate.totalResponses===1 && aggregate.questions[0].responseCount===1);
+  check(aggregate.questions[0].options[0].label==='Raised' && aggregate.questions[0].options[0].count===1);
+  check(aggregate.questions[0].options[1].count===0 && aggregate.questions[1].responseCount===1);
+  check(aggregate.questions[1].options.length===0);
+  check(!JSON.stringify(aggregate).includes(resident) && !JSON.stringify(aggregate).includes('Slower traffic near school.'));
   const consultations = (await rpc('civic_participation')).consultations;
   check(consultations[0].responseCount===1 && Object.keys(consultations[0].answers).length===0);
   check((await rpc('civic_bootstrap')).notifications.length===0);
@@ -111,6 +122,14 @@ try {
   }
   check((await rpc('civic_bootstrap')).notifications.length===2);
   await denied(()=>db.query('select * from civic_private.consultation_answers'));
+  await asUser(other);
+  await denied(()=>results());
+  await db.exec('reset role');
+  await db.query("update civic_private.profiles set role='officer' where id=$1",[other]);
+  await asUser(other);
+  await denied(()=>results());
+  await asUser(null,'anon');
+  await denied(()=>results());
   await asUser(other);
   check((await rpc('civic_participation')).consultations.length===0);
   await denied(()=>answer({q1:'Raised',q2:'Reason'}));
