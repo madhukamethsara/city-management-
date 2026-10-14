@@ -59,7 +59,9 @@ project-update feed entries and older-comment browsing remain follow-up work.
 1. Proposals and consultations: persistent proposals, support/follow preferences,
    comments, officer review and consultation publication are implemented locally.
    Text and choice answers persist privately with one response per person.
-   Live staging verification, proposal attachments, project conversion and
+   Proposal-to-project conversion is implemented locally with atomic officer-only
+   creation, revision checks, safe retries, resident project links and notifications.
+   Live staging verification, proposal attachments and
    aggregate consultation results remain follow-up work. The officer editor
    publishes mixed written-answer and single-choice questions with validated options.
    Participation lists/comments currently load in full; server pagination remains work.
@@ -74,6 +76,10 @@ project-update feed entries and older-comment browsing remain follow-up work.
    verify create -> edit -> reload -> remove across real administrator sessions.
 
 Deliver and test each module end to end before exposing it in connected mode.
+
+Proposal conversion requires `202610140001_proposal_conversion.sql` after the
+existing participation, observability and project-assets migrations. Consultation
+results are delivered separately; neither feature has been verified in staging.
 
 Apply the four 20261006 migrations in filename order after department lifecycle.
 Connected screens require these migrations; they do not fall back to demo data.

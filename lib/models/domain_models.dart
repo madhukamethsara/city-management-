@@ -679,6 +679,7 @@ class Proposal {
     required this.followerIds,
     this.supportCount,
     this.revision = 0,
+    this.projectId,
   });
 
   final String id;
@@ -695,10 +696,12 @@ class Proposal {
   final List<CivicComment> comments;
   final Set<String> followerIds;
   final int? supportCount;
+  final String? projectId;
   final int revision;
   int get totalSupport => supportCount ?? supporterIds.length;
 
   Proposal copyWith({
+    String? projectId,
     ProposalStatus? status,
     int? supportCount,
     int? revision,
@@ -722,6 +725,7 @@ class Proposal {
     followerIds: followerIds ?? this.followerIds,
     supportCount: supportCount ?? this.supportCount,
     revision: revision ?? this.revision,
+    projectId: projectId ?? this.projectId,
   );
 }
 

@@ -1380,6 +1380,15 @@ class _ReportEditorState extends State<_ReportEditor> {
 class AdminProjectsPanel extends StatelessWidget {
   const AdminProjectsPanel({super.key});
 
+  static Future<void> convertProposal(
+    BuildContext context,
+    Proposal proposal,
+  ) => showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    builder: (context) => _ProjectEditor(proposal: proposal),
+  );
+
   @override
   Widget build(BuildContext context) {
     final controller = AppScope.of(context);
@@ -1469,9 +1478,10 @@ class AdminProjectsPanel extends StatelessWidget {
 }
 
 class _ProjectEditor extends StatefulWidget {
-  const _ProjectEditor({this.project});
+  const _ProjectEditor({this.project, this.proposal});
 
   final Project? project;
+  final Proposal? proposal;
 
   @override
   State<_ProjectEditor> createState() => _ProjectEditorState();
@@ -1519,11 +1529,13 @@ class _ProjectEditorState extends State<_ProjectEditor> {
         widget.project ??
         controller.buildProject(
           ProjectDraft(
-            title: '',
-            description: '',
-            category: 'Public infrastructure',
-            locationLabel: '',
-            status: ProjectStatus.proposed,
+            title: widget.proposal?.title ?? '',
+            description: widget.proposal?.description ?? '',
+            category: widget.proposal?.category ?? 'Public infrastructure',
+            locationLabel: widget.proposal?.locationLabel ?? '',
+            status: widget.proposal == null
+                ? ProjectStatus.proposed
+                : ProjectStatus.planned,
             progress: 0,
             budget: 0,
             department: controller.departments.isEmpty
@@ -1739,7 +1751,12 @@ class _ProjectEditorState extends State<_ProjectEditor> {
         }
         _saveAttempt = project.copyWith(imageLabels: paths);
       }
-      await controller.saveProject(_saveAttempt ?? project);
+      _saveAttempt ??= project;
+      if (widget.proposal != null) {
+        await controller.convertProposal(widget.proposal!, _saveAttempt!);
+      } else {
+        await controller.saveProject(_saveAttempt!);
+      }
     });
     if (!mounted) return;
     setState(() => _saving = false);
@@ -1774,7 +1791,11 @@ class _ProjectEditorState extends State<_ProjectEditor> {
                     'Retry keeps the original project details and uploaded files. Close and reopen to review a conflict.',
                   ),
                 Text(
-                  widget.project == null ? 'Create project' : 'Manage project',
+                  widget.proposal != null
+                      ? 'Convert proposal to project'
+                      : widget.project == null
+                      ? 'Create project'
+                      : 'Manage project',
                   style: const TextStyle(
                     fontSize: 21,
                     fontWeight: FontWeight.w900,
@@ -2072,6 +2093,8 @@ class _ProjectEditorState extends State<_ProjectEditor> {
                   child: Text(
                     _saving
                         ? 'Saving...'
+                        : widget.proposal != null
+                        ? 'Convert to project'
                         : widget.project == null
                         ? 'Create project'
                         : 'Save project changes',

@@ -41,7 +41,9 @@ presence is not production completion. See ROADMAP.md for current delivery statu
 - [x] Calculate authority analytics on the server across all project pages.
 - [x] Record private administrator audit history with cursor pagination.
 - [ ] Verify participation, project feedback, audit history and analytics against staging.
-- [ ] Add proposal attachments, project conversion and aggregate consultation results.
+- [x] Convert approved proposals to projects atomically with officer permissions, safe retries and a resident project link.
+- [ ] Verify proposal conversion and notification delivery against staging.
+- [ ] Add proposal attachments and aggregate consultation results.
 - [ ] Add authority transfers and officer assignment using unique IDs.
 - [ ] Complete Sinhala, Tamil, and English translations and accessibility checks.
 

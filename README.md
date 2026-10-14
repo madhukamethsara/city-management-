@@ -59,6 +59,7 @@ Apply all ten migrations in order before starting connected mode:
 8. `supabase/migrations/202610060003_project_feedback.sql`
 9. `supabase/migrations/202610060004_project_assets.sql`
 10. `supabase/migrations/202610070001_notification_refresh.sql`
+11. `supabase/migrations/202610140001_proposal_conversion.sql` for atomic approved-proposal conversion.
 
 Provision actual authorities and departments, register staging users, and assign the initial officer/administrator roles as described in the backend guide. New accounts start as citizens. Server functions enforce authority and role permissions; connected mode does not fall back to demo records.
 
