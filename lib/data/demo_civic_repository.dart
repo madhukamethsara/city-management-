@@ -2,7 +2,6 @@ import '../models/domain_models.dart';
 import '../models/consultation_results.dart';
 import 'civic_failure.dart';
 import 'civic_repository.dart';
-import 'civic_failure.dart';
 import 'project_codec.dart';
 import 'dart:convert';
 
