@@ -306,22 +306,29 @@ class _LoginScreenState extends State<LoginScreen> {
             TextFormField(
               controller: _emailController,
               keyboardType: TextInputType.emailAddress,
+              autocorrect: false,
+              autofillHints: const [AutofillHints.email],
+              textInputAction: TextInputAction.next,
               decoration: const InputDecoration(
                 labelText: 'Email address',
                 prefixIcon: Icon(Icons.mail_outline),
               ),
-              validator: (value) => value == null || !value.contains('@')
-                  ? 'Enter a valid email address.'
-                  : null,
+              validator: _validateEmail,
             ),
             const SizedBox(height: 14),
             TextFormField(
               controller: _passwordController,
               obscureText: _hidePassword,
+              autofillHints: const [AutofillHints.password],
+              enableSuggestions: false,
+              autocorrect: false,
+              textInputAction: TextInputAction.done,
+              onFieldSubmitted: (_) => _submit(),
               decoration: InputDecoration(
                 labelText: 'Password',
                 prefixIcon: const Icon(Icons.lock_outline),
                 suffixIcon: IconButton(
+                  tooltip: _hidePassword ? 'Show password' : 'Hide password',
                   onPressed: () =>
                       setState(() => _hidePassword = !_hidePassword),
                   icon: Icon(
@@ -492,6 +499,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
             TextFormField(
               controller: _nameController,
               textCapitalization: TextCapitalization.words,
+              autofillHints: const [AutofillHints.name],
+              textInputAction: TextInputAction.next,
               decoration: const InputDecoration(
                 labelText: 'Full name',
                 prefixIcon: Icon(Icons.person_outline),
@@ -504,17 +513,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
             TextFormField(
               controller: _emailController,
               keyboardType: TextInputType.emailAddress,
+              autocorrect: false,
+              autofillHints: const [AutofillHints.email],
+              textInputAction: TextInputAction.next,
               decoration: const InputDecoration(
                 labelText: 'Email address',
                 prefixIcon: Icon(Icons.mail_outline),
               ),
-              validator: (value) => value == null || !value.contains('@')
-                  ? 'Enter a valid email address.'
-                  : null,
+              validator: _validateEmail,
             ),
             const SizedBox(height: 14),
             TextFormField(
               controller: _passwordController,
+              autofillHints: const [AutofillHints.newPassword],
+              textInputAction: TextInputAction.next,
               obscureText: true,
               decoration: const InputDecoration(
                 labelText: 'Password',
@@ -527,6 +539,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
             const SizedBox(height: 14),
             TextFormField(
               controller: _confirmController,
+              autofillHints: const [AutofillHints.newPassword],
+              textInputAction: TextInputAction.done,
+              onFieldSubmitted: (_) => _register(),
               obscureText: true,
               decoration: const InputDecoration(
                 labelText: 'Confirm password',
@@ -635,13 +650,15 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   TextFormField(
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
+                    autocorrect: false,
+                    autofillHints: const [AutofillHints.email],
+                    textInputAction: TextInputAction.done,
+                    onFieldSubmitted: (_) => _sendReset(),
                     decoration: const InputDecoration(
                       labelText: 'Email address',
                       prefixIcon: Icon(Icons.mail_outline),
                     ),
-                    validator: (value) => value == null || !value.contains('@')
-                        ? 'Enter a valid email address.'
-                        : null,
+                    validator: _validateEmail,
                   ),
                   const SizedBox(height: 18),
                   FilledButton(
@@ -702,6 +719,8 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
           children: <Widget>[
             TextFormField(
               controller: _password,
+              autofillHints: const [AutofillHints.newPassword],
+              textInputAction: TextInputAction.next,
               obscureText: true,
               decoration: const InputDecoration(labelText: 'New password'),
               validator: (value) => value == null || value.length < 8
@@ -711,6 +730,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
             const SizedBox(height: 14),
             TextFormField(
               controller: _confirmation,
+              autofillHints: const [AutofillHints.newPassword],
+              textInputAction: TextInputAction.done,
+              onFieldSubmitted: (_) => _updatePassword(),
               obscureText: true,
               decoration: const InputDecoration(
                 labelText: 'Confirm new password',
@@ -747,6 +769,7 @@ class AuthScaffold extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
+          tooltip: 'Back to welcome',
           onPressed: () =>
               Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false),
           icon: const Icon(Icons.arrow_back),
@@ -754,32 +777,34 @@ class AuthScaffold extends StatelessWidget {
         title: const AppLogo(),
       ),
       body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 470),
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      title,
-                      style: Theme.of(context).textTheme.headlineSmall
-                          ?.copyWith(fontWeight: FontWeight.w900),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      subtitle,
-                      style: const TextStyle(
-                        color: AppColors.muted,
-                        height: 1.5,
+        child: AutofillGroup(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 470),
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        title,
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(fontWeight: FontWeight.w900),
                       ),
-                    ),
-                    const SizedBox(height: 26),
-                    child,
-                  ],
+                      const SizedBox(height: 8),
+                      Text(
+                        subtitle,
+                        style: const TextStyle(
+                          color: AppColors.muted,
+                          height: 1.5,
+                        ),
+                      ),
+                      const SizedBox(height: 26),
+                      child,
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -800,4 +825,12 @@ void _showAuthError(BuildContext context, Object error) {
       ),
     ),
   );
+}
+
+String? _validateEmail(String? value) {
+  final email = value?.trim() ?? '';
+  if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(email)) {
+    return 'Enter a valid email address.';
+  }
+  return null;
 }

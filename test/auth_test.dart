@@ -285,4 +285,53 @@ void main() {
       isNotNull,
     );
   });
+  testWidgets('login rejects malformed email and submits from keyboard', (
+    tester,
+  ) async {
+    final auth = FakeAuth()..rejectLogin = true;
+    final app = AppController(DemoCivicRepository(), auth: auth);
+    addTearDown(app.dispose);
+    await tester.runAsync(app.bootstrap);
+    await tester.pumpWidget(SmartSabhaApp(controller: app));
+    await tester.tap(find.text('Sign in'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField).at(0), 'resident@');
+    await tester.enterText(find.byType(TextFormField).at(1), 'wrong-password');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(find.text('Enter a valid email address.'), findsOneWidget);
+    expect(auth.submittedPassword, isNull);
+    await tester.enterText(find.byType(TextFormField).at(0), resident.email);
+    await tester.enterText(find.byType(TextFormField).at(1), 'wrong-password');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(auth.submittedPassword, 'wrong-password');
+    expect(find.text('Email or password is incorrect.'), findsOneWidget);
+  });
+
+  testWidgets('password visibility has accessible labels and preserves input', (
+    tester,
+  ) async {
+    final app = AppController(DemoCivicRepository());
+    addTearDown(app.dispose);
+    await tester.runAsync(app.bootstrap);
+    await tester.pumpWidget(SmartSabhaApp(controller: app));
+    await tester.tap(find.text('Sign in'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Show password'));
+    await tester.pump();
+    var field = tester.widget<TextFormField>(find.byType(TextFormField).at(1));
+    expect(field.controller!.text, 'demo12345');
+    expect(
+      tester.widget<EditableText>(find.byType(EditableText).at(1)).obscureText,
+      isFalse,
+    );
+    await tester.tap(find.byTooltip('Hide password'));
+    await tester.pump();
+    expect(
+      tester.widget<EditableText>(find.byType(EditableText).at(1)).obscureText,
+      isTrue,
+    );
+    expect(find.byTooltip('Back to welcome'), findsOneWidget);
+  });
 }
