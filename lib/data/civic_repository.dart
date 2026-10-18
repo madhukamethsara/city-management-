@@ -1,11 +1,16 @@
 import 'dart:typed_data';
 
 import '../models/domain_models.dart';
+import '../models/consultation_results.dart';
 import 'civic_failure.dart';
 
 /// Data boundary for loading and saving civic records.
 /// Production adapters must enforce authentication and authority-scoped access.
 abstract class CivicRepository {
+  /// Returns aggregate counts without disclosing individual answers.
+  Future<ConsultationResults> consultationResults(String id) =>
+      throw const CivicFailure('Consultation results are unavailable.');
+
   /// Creates a project and links an approved proposal in one transaction.
   Future<CivicChanges> convertProposal(Proposal proposal, Project project) =>
       throw const CivicFailure('Proposal conversion is unavailable.');
