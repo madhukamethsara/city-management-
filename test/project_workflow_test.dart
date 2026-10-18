@@ -405,4 +405,52 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+  testWidgets(
+    'refresh preserves projects on failure and retries the first page',
+    (tester) async {
+      final auth = FakeAuth()..currentUser = resident;
+      final repository = ProjectTestRepository(auth);
+      final controller = AppController(repository, auth: auth);
+      addTearDown(controller.dispose);
+      await tester.runAsync(controller.bootstrap);
+      await tester.pumpWidget(
+        AppScope(
+          controller: controller,
+          child: MaterialApp(
+            home: Scaffold(body: ConnectedProjectList(onOpen: (_) async {})),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 100)),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Public road project 0'), findsOneWidget);
+      repository.failNext = true;
+      await tester.tap(find.byTooltip('Refresh projects'));
+      await tester.pumpAndSettle();
+      expect(find.text('Try loading again.'), findsOneWidget);
+      expect(find.text('28 projects'), findsOneWidget);
+      expect(find.text('Public road project 0'), findsOneWidget);
+      await tester.tap(find.text('Retry'));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 100)),
+      );
+      await tester.pumpAndSettle();
+      expect(repository.requests.last, ':0');
+      expect(find.text('Try loading again.'), findsNothing);
+      final before = repository.requests.length;
+      await tester.drag(find.byType(ListView), const Offset(0, 350));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 100)),
+      );
+      await tester.pumpAndSettle();
+      expect(repository.requests.length, before + 1);
+      expect(repository.requests.last, ':0');
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
